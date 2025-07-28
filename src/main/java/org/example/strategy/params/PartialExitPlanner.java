@@ -11,7 +11,7 @@ public class PartialExitPlanner {
 
     // Использует стандартные правила из ValuesUtil
     public PartialExitPlan planExit(List<Double> takeProfits) {
-        return planExit(takeProfits, ValuesUtil.getDefaultExitRules());
+        return planExit(takeProfits, ValuesUtil.getDefaultTpExitRules());
     }
 
     // Использует переданные правила или стандартные из ValuesUtil, если customRules null
@@ -19,7 +19,7 @@ public class PartialExitPlanner {
         ValidationUtils.checkNotNull(takeProfits, "Take profits list cannot be null");
 
         // Определяем, какие правила использовать
-        Map<Integer, int[]> rulesToUse = (customRules != null) ? customRules : ValuesUtil.getDefaultExitRules();
+        Map<Integer, int[]> rulesToUse = (customRules != null) ? customRules : ValuesUtil.getDefaultTpExitRules();
 
         int count = takeProfits.size();
         int[] distribution = rulesToUse.get(count);
@@ -47,6 +47,6 @@ public class PartialExitPlanner {
 
     // Возвращает копию стандартных правил из ValuesUtil
     public static Map<Integer, int[]> getDefaultExitRules() {
-        return ValuesUtil.getDefaultExitRules(); // <-- И здесь
+        return ValuesUtil.getDefaultTpExitRules(); // <-- И здесь
     }
 }

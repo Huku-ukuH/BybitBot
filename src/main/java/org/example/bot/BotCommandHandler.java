@@ -170,7 +170,7 @@ public class BotCommandHandler {
                 result.append(EmojiUtils.OKAY + "Leverage\n");
                 LoggerUtils.logDebug("handleGo()" + EmojiUtils.OKAY + "Leverage\n");
             }
-            // 2. Создаём ордер
+
             BybitOrderRequest request = new BybitOrderRequest(deal);
             BybitOrderResponse orderResponse = bybitOrderService.placeOrder(request, deal);
             LoggerUtils.logWarn("\n" + deal.theBigToString() + "\n");

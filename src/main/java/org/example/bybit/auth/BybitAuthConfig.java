@@ -13,6 +13,6 @@ public class BybitAuthConfig {
         Dotenv dotenv = Dotenv.load();
         this.apiKey = dotenv.get("BYBIT_API_KEY");
         this.apiSecret = dotenv.get("BYBIT_API_SECRET");
-        this.baseUrl = dotenv.get("BYBIT_API_BASE_URL");
+        this.baseUrl = "https://api-testnet.bybit.com";
     }
 }

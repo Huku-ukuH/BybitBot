@@ -38,6 +38,7 @@ public class BybitHttpClient {
                     .build();
 
             String body = sendRequest(request);
+            LoggerUtils.logDebug("request: " + request);
             LoggerUtils.logDebug("GET ← response: " + body);
 
             return JsonUtils.fromJson(body, responseType);

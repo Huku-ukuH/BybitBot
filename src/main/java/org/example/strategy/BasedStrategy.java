@@ -8,23 +8,21 @@ import org.example.model.Direction;
 import org.example.strategy.config.StrategyConfig;
 import org.example.strategy.dto.StrategyContext;
 import org.example.util.LoggerUtils;
-import org.example.strategy.params.PartialExitPlanner; // Предполагается, что этот класс существует
-
+import org.example.strategy.params.PartialExitPlanner;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.HashSet;
 
 /**
  * Базовая стратегия, реализующая стандартную логику управления сделкой.
- * Использует PartialExitPlanner и параметры из StrategyConfig.
  */
 public class BasedStrategy implements TradingStrategy {
 
-    /**
-     * Конфигурация для этой стратегии.
-     * Использует значения по умолчанию из ValuesUtil.
-     */
     private final StrategyConfig config = new StrategyConfig();
+    // Простое множество для отслеживания уже сработавших уровней PnL
+    private final Set<Double> triggeredPnlLevels = new HashSet<>();
 
     @Override
     public StrategyConfig getConfig() {
@@ -34,20 +32,25 @@ public class BasedStrategy implements TradingStrategy {
     @Override
     public List<PartialExitPlan> planExit(StrategyContext context) throws StrategyException {
         Deal deal = context.getActiveDeal();
+        if (deal == null || deal.getTakeProfits().isEmpty()) {
+            LoggerUtils.logWarn("BasedStrategy: Нет активной сделки или TP для планирования выхода.");
+            return Collections.emptyList();
+        }
+
         StrategyConfig config = this.getConfig();
-        Map<Integer, int[]> rules = config.getExitRules();
+        Map<Integer, int[]> rules = config.getTpExitRules();
 
         PartialExitPlanner planner = new PartialExitPlanner();
         PartialExitPlan plan = planner.planExit(deal.getTakeProfits(), rules);
 
-        return Collections.singletonList(plan);
+        if (plan != null) {
+            LoggerUtils.logInfo("BasedStrategy: Создан план выхода с " + plan.getPartialExits().size() + " шагами.");
+            return Collections.singletonList(plan);
+        } else {
+            LoggerUtils.logWarn("BasedStrategy: PartialExitPlanner не смог создать план.");
+            return Collections.emptyList();
+        }
     }
-
-    // В файле org/example/strategy/BasedStrategy.java
-
-// Добавим поле, чтобы отслеживать, выставили ли мы уже TP для определенного уровня PnL
-// Это можно сделать по-разному, например, через флаги или проверку существующих TP
-// Для простоты примера предположим, что TP выставляются один раз при первом достижении уровня
 
     @Override
     public void onPriceUpdate(StrategyContext context, TickerResponse price) {
@@ -56,116 +59,84 @@ public class BasedStrategy implements TradingStrategy {
             return;
         }
 
-        // 1. Получаем символ сделки
-        String dealSymbol = deal.getSymbol().toString(); // Предполагаем, что deal.getSymbol() возвращает объект типа Symbol
+        String dealSymbol = deal.getSymbol().toString();
 
-        // 2. Проверяем, есть ли данные в ответе
         if (price.getResult() == null || price.getResult().getList() == null || price.getResult().getList().isEmpty()) {
             LoggerUtils.logWarn("onPriceUpdate: Получен пустой TickerResponse для сделки " + deal.getId());
             return;
         }
 
-        // 3. Ищем тикер, соответствующий символу сделки
         Double currentPrice = null;
         for (TickerResponse.Ticker ticker : price.getResult().getList()) {
             if (dealSymbol.equals(ticker.getSymbol())) {
                 try {
                     currentPrice = Double.parseDouble(ticker.getLastPrice());
-                    break; // Нашли нужный символ, выходим из цикла
+                    break;
                 } catch (NumberFormatException e) {
-                    LoggerUtils.logError("onPriceUpdate: Не удалось преобразовать lastPrice '" + ticker.getLastPrice() + "' в число для символа " + ticker.getSymbol(), e);
-                    // Или обрабатываем ошибку другим способом
+                    LoggerUtils.logError("onPriceUpdate: Ошибка парсинга цены для " + ticker.getSymbol(), e);
                 }
             }
         }
 
-        // 4. Проверяем, нашли ли мы цену
         if (currentPrice == null) {
-            LoggerUtils.logWarn("onPriceUpdate: Цена для символа " + dealSymbol + " не найдена в TickerResponse");
-            return; // Или выполняем другую логику, если цена не найдена
-        }
-
-        // --- Теперь у вас есть currentPrice как Double ---
-        LoggerUtils.logDebug("BasedStrategy.onPriceUpdate: Текущая цена для " + dealSymbol + " = " + currentPrice);
-        double entryPrice = deal.getEntryPrice();
-        Direction direction = deal.getDirection(); // LONG или SHORT
-
-        if (entryPrice <= 0) { // Защита от деления на ноль или некорректных данных
-            LoggerUtils.logWarn("BasedStrategy.onPriceUpdate: Некорректная цена входа для сделки " + deal.getId());
+            LoggerUtils.logWarn("onPriceUpdate: Цена для " + dealSymbol + " не найдена.");
             return;
         }
 
-        // 1. Рассчитываем текущий PnL в процентах
+        double entryPrice = deal.getEntryPrice();
+        Direction direction = deal.getDirection();
+
+        if (entryPrice <= 0) {
+            LoggerUtils.logWarn("onPriceUpdate: Некорректная цена входа для сделки " + deal.getId());
+            return;
+        }
+
         double pnlPercent;
         if (direction == Direction.LONG) {
             pnlPercent = ((currentPrice - entryPrice) / entryPrice) * 100.0;
-        } else { // SHORT
+        } else {
             pnlPercent = ((entryPrice - currentPrice) / entryPrice) * 100.0;
         }
 
-        // 2. Определяем, достигли ли мы какого-либо из целевых уровней PnL
-        // Предположим, у нас есть заранее определенные уровни (можно также хранить в StrategyConfig)
-        double[] targetPnlLevels = {8.0, 15.0, 23.0}; // Уровни PnL в процентах
+        LoggerUtils.logDebug("BasedStrategy (" + deal.getId() + "): PnL = " + String.format("%.2f", pnlPercent) + "%");
 
-        // Простая логика: проверяем каждый уровень. В реальности нужно учитывать,
-        // что цена может "пробить" сразу несколько уровней, или нужно отслеживать,
-        // какие уровни уже были обработаны.
-        for (double targetPnl : targetPnlLevels) {
-            // Проверяем, "пересекли" ли мы уровень (для LONG - цена выше, для SHORT - ниже)
-            boolean levelReached = (direction == Direction.LONG && pnlPercent >= targetPnl) ||
-                    (direction == Direction.SHORT && pnlPercent >= targetPnl); // PnL для SHORT тоже считается положительно при убыльке
-
-            // Проверяем, не выставляли ли мы уже TP для этого уровня
-            // (это упрощенная проверка, на практике нужно более точно)
-            boolean tpAlreadySet = false;
-            for (Double existingTp : deal.getTakeProfits()) {
-                // Очень грубая проверка, просто для примера
-                if (Math.abs(existingTp - currentPrice) < 0.0001) { // Или какой-то другой порог
-                    tpAlreadySet = true;
-                    break;
-                }
-            }
-
-            if (levelReached && !tpAlreadySet) {
-                // 3. Выставляем TP на текущей цене (или немного хуже, в зависимости от логики)
-                // ВАЖНО: Это просто добавляет цену TP в список. Чтобы *фактически выставить*
-                // ордер на бирже, нужно вызвать соответствующий метод BybitOrderService.
-                // Пока просто добавляем в модель Deal.
-                deal.addTakeProfit(currentPrice);
-                LoggerUtils.logInfo("BasedStrategy: Достигнут PnL " + String.format("%.2f", pnlPercent) +
-                        "%. Установлен TP на уровне " + currentPrice + " для сделки " + deal.getId());
-
-                // --- Дополнительно: можно применить логику PartialExitPlanner ---
-                // Если ты хочешь, чтобы при достижении 8% PnL, например, 30% позиции вышло,
-                // а при 15% - еще 40%, тебе нужно:
-                // 1. Хранить состояние (сколько уже вышло).
-                // 2. При достижении уровня PnL, рассчитать, какой процент нужно вывести.
-                // 3. Вызвать BybitOrderService.placeTakeProfitOrder(...) с нужным количеством.
-                // ---
-                // Пример (упрощенный):
-                // if (Math.abs(targetPnl - 8.0) < 0.01) {
-                //     // Рассчитываем 30% от текущего размера позиции
-                //     double qtyToExit = deal.getPositionSize() * 0.30;
-                //     // bybitOrderService.placeTakeProfitOrder(deal.getSymbol(), qtyToExit, currentPrice, ...);
-                //     LoggerUtils.logInfo("BasedStrategy: Выставлен ордер на выход 30% позиции по TP " + currentPrice);
-                // }
-                // ---
-            }
+        // Получаем правила выхода по PnL из конфига стратегии
+        Map<Double, Integer> pnlRules = config.getPnlTpExitRules();
+        if (pnlRules.isEmpty()) {
+            LoggerUtils.logDebug("BasedStrategy: Нет правил выхода по PnL в конфиге.");
+            return;
         }
 
-        // Другая логика onPriceUpdate (например, трейлинг SL) может идти здесь...
-        // LoggerUtils.logDebug("BasedStrategy: Получено обновление цены для сделки " + deal.getId() + ". PnL: " + String.format("%.2f", pnlPercent) + "%");
+        // Проверяем, достигнуты ли уровни PnL
+        for (Map.Entry<Double, Integer> ruleEntry : pnlRules.entrySet()) {
+            double targetPnlLevel = ruleEntry.getKey();
+            int exitPercentage = ruleEntry.getValue();
+
+            boolean levelReached = (direction == Direction.LONG && pnlPercent >= targetPnlLevel) ||
+                    (direction == Direction.SHORT && pnlPercent >= targetPnlLevel);
+
+            if (levelReached && !triggeredPnlLevels.contains(targetPnlLevel)) {
+                deal.addTakeProfit(currentPrice);
+                triggeredPnlLevels.add(targetPnlLevel);
+                LoggerUtils.logInfo("BasedStrategy: Достигнут PnL " + String.format("%.2f", targetPnlLevel) +
+                        "%. Установлен TP. Планируется выход " + exitPercentage + "% позиции.");
+                // TODO: Здесь должна быть логика фактического размещения TP-ордера с exitPercentage
+                // Например, вызов BybitOrderService.placeTakeProfitOrder с рассчитанным qty
+            }
+        }
     }
 
     @Override
     public void onTakeProfitHit(StrategyContext context, double executedPrice) {
         LoggerUtils.logInfo("BasedStrategy: Сработал TP на уровне " + executedPrice + ".");
+        // Сброс триггера, если нужно повторно реагировать на тот же уровень (обычно не нужно)
+        // triggeredPnlLevels.removeIf(level -> Math.abs(level - ...) < epsilon);
     }
 
     @Override
     public void onStopLossHit(StrategyContext context) {
         LoggerUtils.logWarn("BasedStrategy: Сработал SL.");
+        // Очищаем отслеживаемые уровни при закрытии сделки
+        triggeredPnlLevels.clear();
     }
-
-
 }

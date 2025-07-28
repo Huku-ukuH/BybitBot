@@ -1,4 +1,4 @@
-
+// Файл: src/main/java/org/example/strategy/config/StrategyConfig.java
 package org.example.strategy.config;
 
 import lombok.Getter;
@@ -7,54 +7,68 @@ import org.example.util.ValuesUtil;
 
 import java.util.Arrays;
 import java.util.Map;
+import java.util.HashMap;
 
 /**
  * Класс для хранения конфигурационных параметров стратегии.
- * Может использовать значения по умолчанию из ValuesUtil или задавать собственные.
  */
 @Getter
 @Setter
 public class StrategyConfig {
+
     private double defaultSlPercent;
     private double maxLossInPosition;
     private int[] leverageTrails;
     private double warningDistancePercent;
-    private Map<Integer, int[]> exitRules;
+    private Map<Integer, int[]> tpExitRules;
+    private Map<Double, Integer> pnlTpExitRules;
 
-    /**
-     * Конструктор по умолчанию.
-     * Инициализирует параметры значениями из ValuesUtil.
-     */
+
     public StrategyConfig() {
         this.defaultSlPercent = ValuesUtil.getDefaultSlPercent();
-        this.maxLossInPosition = ValuesUtil.getMaxLossInPosition();
-        this.leverageTrails = Arrays.copyOf(ValuesUtil.getLeverageTrails(), ValuesUtil.getLeverageTrails().length);
+        this.maxLossInPosition = ValuesUtil.getDefaultMaxLossInPosition();
+        this.leverageTrails = Arrays.copyOf(ValuesUtil.getDefaultLeverageTrails(), ValuesUtil.getDefaultLeverageTrails().length);
         this.warningDistancePercent = ValuesUtil.getWarningDistancePercent();
-        this.exitRules = ValuesUtil.getDefaultExitRules();
+        this.tpExitRules = ValuesUtil.getDefaultTpExitRules();
+        this.pnlTpExitRules = ValuesUtil.getDefaultPnlTpExitRules();
     }
 
-    //Конструктор с пользовательскими параметрами.
-    public StrategyConfig(double defaultSlPercent, int maxLossInPosition, int[] leverageTrails, double warningDistancePercent, Map<Integer, int[]> customExitRules) {
-        this.defaultSlPercent = defaultSlPercent;
-        this.maxLossInPosition = maxLossInPosition;
-        this.leverageTrails = leverageTrails != null ? Arrays.copyOf(leverageTrails, leverageTrails.length) : new int[0];
-        this.warningDistancePercent = warningDistancePercent;
-        this.exitRules = customExitRules;
+    // Конструктор с пользовательскими параметрами и fallback на дефолтные значения
+    public StrategyConfig(Double customSlPercent, Double customMaxLossInPosition, int[] customLeverageTrails,
+                          Double customWarningDistancePercent, Map<Integer, int[]> customTpExitRules,
+                          Map<Double, Integer> customPnlTpExitRules) {
+
+        this.defaultSlPercent = customSlPercent != null ? customSlPercent : ValuesUtil.getDefaultSlPercent();
+        this.maxLossInPosition = customMaxLossInPosition != null ? customMaxLossInPosition : ValuesUtil.getDefaultMaxLossInPosition();
+        this.warningDistancePercent = customWarningDistancePercent != null ? customWarningDistancePercent : ValuesUtil.getWarningDistancePercent();
+        this.leverageTrails = customLeverageTrails != null ?
+                Arrays.copyOf(customLeverageTrails, customLeverageTrails.length) :
+                Arrays.copyOf(ValuesUtil.getDefaultLeverageTrails(), ValuesUtil.getDefaultLeverageTrails().length);
+        this.tpExitRules = customTpExitRules != null ?
+                new HashMap<>(customTpExitRules) :
+                ValuesUtil.getDefaultTpExitRules();
+        this.pnlTpExitRules = customPnlTpExitRules != null ?
+                new HashMap<>(customPnlTpExitRules) :
+                ValuesUtil.getDefaultPnlTpExitRules();
     }
 
-
-
+    // Переопределяем для безопасности
     public int[] getLeverageTrails() {
-        // Возвращаем копию массива, чтобы предотвратить модификацию внутреннего состояния
         return Arrays.copyOf(leverageTrails, leverageTrails.length);
     }
 
-
     public void setLeverageTrails(int[] leverageTrails) {
-        // Создаем копию массива, чтобы избежать внешних изменений
         this.leverageTrails = leverageTrails != null ? Arrays.copyOf(leverageTrails, leverageTrails.length) : new int[0];
     }
 
+    // Новые геттер и сеттер для pnlExitRules
+    public Map<Double, Integer> getPnlTpExitRules() {
+        return pnlTpExitRules != null ? new HashMap<>(pnlTpExitRules) : new HashMap<>();
+    }
+
+    public void setPnlTpExitRules(Map<Double, Integer> pnlTpExitRules) {
+        this.pnlTpExitRules = pnlTpExitRules != null ? new HashMap<>(pnlTpExitRules) : new HashMap<>();
+    }
 
     @Override
     public String toString() {
@@ -63,6 +77,8 @@ public class StrategyConfig {
                 ", maxLossInPosition=" + maxLossInPosition +
                 ", leverageTrails=" + Arrays.toString(leverageTrails) +
                 ", warningDistancePercent=" + warningDistancePercent +
+                ", exitRules=" + tpExitRules +
+                ", pnlExitRules=" + pnlTpExitRules +
                 '}';
     }
 }

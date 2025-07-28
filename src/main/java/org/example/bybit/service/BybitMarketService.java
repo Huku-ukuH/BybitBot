@@ -1,4 +1,6 @@
+// Файл: src/main/java/org/example/bybit/service/BybitMarketService.java
 package org.example.bybit.service;
+
 import org.example.bybit.dto.InstrumentInfoResponse;
 import org.example.bybit.dto.TickerResponse;
 import org.example.bybit.client.BybitHttpClient;
@@ -6,38 +8,31 @@ import org.example.util.LoggerUtils;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-
 
 public class BybitMarketService {
     private final BybitHttpClient httpClient;
     private String accountCategorySpot = "spot";
     private String accountCategoryLinear = "linear";
-
+    private final Map<String, InstrumentInfoResponse.Instrument> instrumentInfoCache = new HashMap<>();
 
     public BybitMarketService(BybitHttpClient httpClient) {
         this.httpClient = httpClient;
     }
 
-
-    /**
-     * Получает последнюю цену указанного символа на фьючерсном рынке Bybit (category = linear).
-     *
-     * @param symbol тикер (например: "BTCUSDT")
-     * @return последняя цена (lastPrice)
-     */
     public double getLastPrice(String symbol) {
         String endpoint = "/v5/market/tickers";
         Map<String, String> params = Map.of(
-                "category", accountCategoryLinear, // фьючерсы (можно заменить на accountCategoryLinear, если нужно)
+                "category", accountCategoryLinear,
                 "symbol", symbol
         );
 
         TickerResponse response = httpClient.get(endpoint, params, TickerResponse.class);
         List<TickerResponse.Ticker> tickers = response.getResult().getList();
 
-        LoggerUtils.logInfo("ответ getLastPrice: " + tickers);
+        LoggerUtils.logDebug("ответ getLastPrice для " + symbol + ": " + tickers); // Изменено на logDebug
         if (tickers == null || tickers.isEmpty()) {
             throw new RuntimeException("Пустой список тикеров для символа: " + symbol);
         }
@@ -50,86 +45,92 @@ public class BybitMarketService {
     }
 
     public double getMinOrderQty(String symbol) {
-        String endpoint = "/v5/market/instruments-info";
-        Map<String, String> params = Map.of(
-                "category", accountCategoryLinear,
-                "symbol", symbol
-        );
-
-        InstrumentInfoResponse response = httpClient.get(endpoint, params, InstrumentInfoResponse.class);
-        List<InstrumentInfoResponse.Instrument> list = response.getResult().getList();
-        if (list == null || list.isEmpty()) {
-            throw new RuntimeException("Информация по инструментам отсутствует для символа: " + symbol);
-        }
-
-        double minOrderQty = list.get(0).getLotSizeFilter().getMinOrderQty();
+        InstrumentInfoResponse.Instrument instrumentInfo = getInstrumentInfoFromCacheOrApi(symbol);
+        double minOrderQty = instrumentInfo.getLotSizeFilter().getMinOrderQty();
         if (minOrderQty <= 0) {
-            throw new IllegalStateException("Некорректный minOrderQty: " + minOrderQty);
+            throw new IllegalStateException("Некорректный minOrderQty для " + symbol + ": " + minOrderQty);
         }
-
+        LoggerUtils.logDebug("Минимальное количество для ордера (" + symbol + "): " + minOrderQty);
         return minOrderQty;
     }
 
-
-    // тестовые методы для предотвращения некоректного тик сайза
+    //  Извлекает шаг приращения
     public double getLotSizeStep(String symbol) {
-        String endpoint = "/v5/market/instruments-info";
-        Map<String, String> params = Map.of(
-                "category", accountCategoryLinear,
-                "symbol", symbol
-        );
-
-        InstrumentInfoResponse response = httpClient.get(endpoint, params, InstrumentInfoResponse.class);
-        List<InstrumentInfoResponse.Instrument> list = response.getResult().getList();
-        if (list == null || list.isEmpty()) {
-            throw new RuntimeException("Информация по инструментам отсутствует для символа: " + symbol);
-        }
-
-        double qtyStep = list.get(0).getLotSizeFilter().getQtyStep();
+        InstrumentInfoResponse.Instrument instrumentInfo = getInstrumentInfoFromCacheOrApi(symbol);
+        double qtyStep = instrumentInfo.getLotSizeFilter().getQtyStep();
         if (qtyStep <= 0) {
             throw new IllegalStateException("Неверный qtyStep для символа: " + symbol + " (qtyStep=" + qtyStep + ")");
         }
-
         return qtyStep;
     }
 
-
+    // корректирует quantity чтобы оно соответствовало правилам minOrderQty и qtyStep
     public double roundLotSize(String symbol, double quantity) {
-        String endpoint = "/v5/market/instruments-info";
-        Map<String, String> params = Map.of(
-                "category", accountCategoryLinear,
-                "symbol", symbol
-        );
-
-        InstrumentInfoResponse response = httpClient.get(endpoint, params, InstrumentInfoResponse.class);
-        List<InstrumentInfoResponse.Instrument> list = response.getResult().getList();
-        if (list == null || list.isEmpty()) {
-            throw new RuntimeException("Информация отсутствует для " + symbol);
+        // 1. Проверка на недопустимые входные данные
+        if (Double.isNaN(quantity) || Double.isInfinite(quantity) || quantity < 0) {
+            throw new IllegalArgumentException("Недопустимое количество для округления: " + quantity);
         }
 
-        double stepSize = list.get(0).getLotSizeFilter().getQtyStep();
-        double minQty = list.get(0).getLotSizeFilter().getMinOrderQty();
+        InstrumentInfoResponse.Instrument instrumentInfo = getInstrumentInfoFromCacheOrApi(symbol);
+
+        double stepSize = instrumentInfo.getLotSizeFilter().getQtyStep();
+        double minQty = instrumentInfo.getLotSizeFilter().getMinOrderQty();
 
         if (stepSize <= 0 || minQty <= 0) {
             throw new IllegalStateException("Неверные параметры qtyStep или minQty для " + symbol +
                     " (qtyStep=" + stepSize + ", minQty=" + minQty + ")");
         }
 
+        if (quantity < minQty) {
+            LoggerUtils.logDebug("🔁 Входное кол-во " + quantity + " меньше minQty " + minQty + " — замена на minQty.");
+            return formatQuantity(minQty);
+        }
+
         BigDecimal step = BigDecimal.valueOf(stepSize);
         BigDecimal qty = BigDecimal.valueOf(quantity);
-
-        // Округляем ВНИЗ до ближайшего кратного stepSize
         BigDecimal rounded = qty.divide(step, 0, RoundingMode.DOWN).multiply(step);
         double result = rounded.doubleValue();
 
-        // Если меньше минимального — устанавливаем минимально допустимое значение
         if (result < minQty) {
-            LoggerUtils.logInfo("🔁 Кол-во " + result + " меньше minQty " + minQty + " — замена на minQty.");
+            LoggerUtils.logWarn("⚠️ После округления кол-во " + result + " оказалось меньше minQty " + minQty +
+                    " для символа " + symbol + ". Возвращаем minQty.");
             result = minQty;
         }
 
         return formatQuantity(result);
     }
+
+
+    private InstrumentInfoResponse.Instrument getInstrumentInfoFromCacheOrApi(String symbol) {
+
+        InstrumentInfoResponse.Instrument cachedInfo = instrumentInfoCache.get(symbol);
+        if (cachedInfo != null) {
+            LoggerUtils.logDebug("Информация об инструменте " + symbol + " получена из кэша.");
+            return cachedInfo;
+        }
+
+        LoggerUtils.logDebug("Информация об инструменте " + symbol + " отсутствует в кэше. Запрос к API Bybit.");
+        String endpoint = "/v5/market/instruments-info";
+        Map<String, String> params = Map.of(
+                "category", accountCategoryLinear,
+                "symbol", symbol
+        );
+
+        InstrumentInfoResponse response = httpClient.get(endpoint, params, InstrumentInfoResponse.class);
+        List<InstrumentInfoResponse.Instrument> list = response.getResult().getList();
+        if (list == null || list.isEmpty()) {
+            throw new RuntimeException("Информация по инструментам отсутствует для символа: " + symbol);
+        }
+
+        InstrumentInfoResponse.Instrument instrumentInfo = list.get(0);
+
+        // 3. Сохраняем в кэш
+        instrumentInfoCache.put(symbol, instrumentInfo);
+        LoggerUtils.logDebug("Информация об инструменте " + symbol + " сохранена в кэш.");
+
+        return instrumentInfo;
+    }
+    // -----------------------------------
 
     private static double formatQuantity(double value) {
         BigDecimal bd = new BigDecimal(Double.toString(value));
