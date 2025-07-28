@@ -58,13 +58,12 @@ public class BasedStrategy implements TradingStrategy {
         if (deal == null || !deal.isActive()) {
             return;
         }
-
-        String dealSymbol = deal.getSymbol().toString();
-
         if (price.getResult() == null || price.getResult().getList() == null || price.getResult().getList().isEmpty()) {
             LoggerUtils.logWarn("onPriceUpdate: Получен пустой TickerResponse для сделки " + deal.getId());
             return;
         }
+
+        String dealSymbol = deal.getSymbol().toString();
 
         Double currentPrice = null;
         for (TickerResponse.Ticker ticker : price.getResult().getList()) {
@@ -93,9 +92,9 @@ public class BasedStrategy implements TradingStrategy {
 
         double pnlPercent;
         if (direction == Direction.LONG) {
-            pnlPercent = ((currentPrice - entryPrice) / entryPrice) * 100.0;
+            pnlPercent = ((currentPrice - entryPrice) / entryPrice) * 100.0 * deal.getLeverageUsed();
         } else {
-            pnlPercent = ((entryPrice - currentPrice) / entryPrice) * 100.0;
+            pnlPercent = ((entryPrice - currentPrice) / entryPrice) * 100.0 * deal.getLeverageUsed();
         }
 
         LoggerUtils.logDebug("BasedStrategy (" + deal.getId() + "): PnL = " + String.format("%.2f", pnlPercent) + "%");
@@ -109,8 +108,8 @@ public class BasedStrategy implements TradingStrategy {
 
         // Проверяем, достигнуты ли уровни PnL
         for (Map.Entry<Double, Integer> ruleEntry : pnlRules.entrySet()) {
-            double targetPnlLevel = ruleEntry.getKey();
-            int exitPercentage = ruleEntry.getValue();
+            double targetPnlLevel = ruleEntry.getKey() * deal.getLeverageUsed();
+            int exitPercentage = ruleEntry.getValue() * deal.getLeverageUsed();
 
             boolean levelReached = (direction == Direction.LONG && pnlPercent >= targetPnlLevel) ||
                     (direction == Direction.SHORT && pnlPercent >= targetPnlLevel);
@@ -120,6 +119,9 @@ public class BasedStrategy implements TradingStrategy {
                 triggeredPnlLevels.add(targetPnlLevel);
                 LoggerUtils.logInfo("BasedStrategy: Достигнут PnL " + String.format("%.2f", targetPnlLevel) +
                         "%. Установлен TP. Планируется выход " + exitPercentage + "% позиции.");
+
+
+
                 // TODO: Здесь должна быть логика фактического размещения TP-ордера с exitPercentage
                 // Например, вызов BybitOrderService.placeTakeProfitOrder с рассчитанным qty
             }
