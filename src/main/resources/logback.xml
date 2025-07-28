@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+
+    <!-- Подключаем цветной вывод -->
+    <conversionRule conversionWord="clr"
+                    converterClass="org.springframework.boot.logging.logback.ColorConverter" />
+    <conversionRule conversionWord="wex"
+                    converterClass="org.springframework.boot.logging.logback.WhitespaceThrowableProxyConverter" />
+
+    <!-- Форматы -->
+    <property name="CONSOLE_PATTERN"
+              value="%clr(%d{yyyy-MM-dd HH:mm:ss}){faint} [%thread] %clr(%.5level){+highlight} %logger{36} - %clr(%msg){cyan}%n"/>
+
+    <property name="FILE_PATTERN"
+              value="%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"/>
+
+    <!-- Консольный вывод только для пользовательских пакетов -->
+    <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>${CONSOLE_PATTERN}</pattern>
+            <charset>utf8</charset>
+        </encoder>
+        <!-- Только DEBUG и выше -->
+        <filter class="ch.qos.logback.classic.filter.ThresholdFilter">
+            <level>DEBUG</level>
+        </filter>
+    </appender>
+
+    <!-- Основной файл для своих логов -->
+    <appender name="MAIN_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>logs/BybitBot.log</file>
+        <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+            <fileNamePattern>logs/archived/BybitBot.%d{yyyy-MM-dd}.%i.log.gz</fileNamePattern>
+            <maxFileSize>2GB</maxFileSize>
+            <maxHistory>30</maxHistory>
+            <totalSizeCap>20GB</totalSizeCap>
+        </rollingPolicy>
+        <encoder>
+            <pattern>${FILE_PATTERN}</pattern>
+            <charset>utf8</charset>
+        </encoder>
+    </appender>
+
+    <!-- Файл для системных логов -->
+    <appender name="SYSTEM_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>logs/system.log</file>
+        <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+            <fileNamePattern>logs/archived/system.%d{yyyy-MM-dd}.%i.log.gz</fileNamePattern>
+            <maxFileSize>2GB</maxFileSize>
+            <maxHistory>7</maxHistory>
+            <totalSizeCap>5GB</totalSizeCap>
+        </rollingPolicy>
+        <encoder>
+            <pattern>${FILE_PATTERN}</pattern>
+            <charset>utf8</charset>
+        </encoder>
+    </appender>
+
+    <!-- Логгер для своих классов (меняй на свой root-пакет) -->
+    <logger name="org.example" level="DEBUG">
+        <appender-ref ref="STDOUT"/>
+        <appender-ref ref="MAIN_FILE"/>
+    </logger>
+
+    <!-- Логгер для системных библиотек -->
+    <logger name="org.springframework" level="DEBUG">
+        <appender-ref ref="SYSTEM_FILE"/>
+    </logger>
+    <logger name="org.apache" level="DEBUG">
+        <appender-ref ref="SYSTEM_FILE"/>
+    </logger>
+    <logger name="java" level="DEBUG">
+        <appender-ref ref="SYSTEM_FILE"/>
+    </logger>
+    <logger name="io.netty" level="DEBUG">
+        <appender-ref ref="SYSTEM_FILE"/>
+    </logger>
+    <!-- Добавь другие нежелательные пакеты при необходимости -->
+
+    <!-- Корневой логгер — ничего не выводит сам, всё делают специализированные логгеры -->
+    <root level="OFF">
+    </root>
+
+</configuration>

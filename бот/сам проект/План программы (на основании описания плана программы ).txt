@@ -1,0 +1,92 @@
+18.07.2025
+
+src/
+└── main/
+    ├── java/
+    │   └── org.example/
+    │       ├── TradingBotApplication.java
+    │       │
+    │       ├── bot/                      // Telegram клиент и управление ботом
+    │       │   ├── TradingBot.java
+    │       │   ├── BotCommandHandler.java
+    │       │   ├── MessageSender.java
+    │       │   ├── ButtonManager.java
+    │       │   ├── TelegramUser.java
+    │       │   └── UserStorage.java
+    │       │
+    │       ├── ai/                       // Взаимодействие с ИИ
+    │       │   └── AiService.java
+    │       │    dto/
+    │       │
+    │       ├── bybit/                    // Взаимодействие с биржей Bybit
+    │       │   ├── BybitHttpClient.java
+    │       │   ├── BybitWebSocketClient.java
+    │       │   ├── BybitAuthConfig.java
+    │       │   │
+    │       │   ├── dto/
+    │       │   │   ├── BalanceResponse.java
+    │       │   │   ├── BybitOrderListResponse.java
+    │       │   │   ├── BybitOrderRequest.java
+    │       │   │   ├── BybitOrderResponse.java
+    │       │   │   ├── InstrumentInfoResponse.java
+    │       │   │   ├── OrderBookSummary.java
+    │       │   │   ├── SetLeverageResponse.java
+    │       │   │   ├── TickerResponse.java
+    │       │   │   └── DealRequest.java
+    │       │   │
+    │       │   ├── service/
+    │       │   │   ├── BybitAccountService.java
+    │       │   │   ├── BybitMarketService.java
+    │       │   │   ├── BybitMonitorService.java
+    │       │   │   └── BybitOrderService.java
+    │       │   │
+    │       │   └── util/
+    │       │       ├── BybitRequestUtils.java
+    │       │       └── SubscriptionManager.java
+    │       │
+    │       ├── deal/                     // Работа с сделками
+    │       │   ├── Deal.java
+    │       │   ├── DealCalculator.java
+    │       │   ├── DealValidator.java
+    │       │   ├── PartialExitPlanner.java
+    │       │   ├── ActiveDealStore.java
+    │       │   └── dto/
+    │       │       ├── DealValidationResult.java
+    │       │       ├── PartialExitPlan.java
+    │       │       └── PositionCalculationResult.java
+    │       │
+    │       ├── model/                    // Модели: тикер, направление, тип ордера
+    │       │   ├── Symbol.java
+    │       │   ├── Side.java
+    │       │   └── OrderType.java
+    │       │
+    │       ├── monitor/                  // Мониторинг цены, SL/TP
+    │       │   ├── PriceMonitor.java
+    │       │   ├── StopLossManager.java
+    │       │   └── PositionTracker.java
+    │       │
+    │       ├── strategy/
+    │       │   ├── AiBasedStrategy.java 
+    │       │   ├── FixedRiskStrategy.java         
+    │       │   ├── MartingaleStrategy.java   
+    │       │   ├── StrategyException.java     
+    │       │   ├── StrategyFactory.java       
+    │       │   ├── TradingStrategy.java 
+    │       │   ├──── config/
+    │       │   │     └── StrategyConfig.java    
+    │       │   │      
+    │       │   └──── dto/
+    │       │         └── StrategyContext.java  
+    │       │
+    │       │
+    │       └── util/                     // Вспомогательные утилиты
+    │           ├── EmojiUtils.java
+    │           ├── JsonUtils.java
+    │           ├── LoggerUtils.java
+    │           ├── MathUtils.java
+    │           ├── ValidationUtils.java
+    │           └── ValuesUtil.java
+    │
+    └── resources/
+        └── prompts/
+            ├── get_signal_prompt.txt

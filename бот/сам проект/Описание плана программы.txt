@@ -1,0 +1,95 @@
+18.07.2025
+Описание классов программы
+/idea
+  /BybitBot
+    /src/main
+      /java/org/example
+
+	1) /AI (Модуль ИИ для парсинга сделок и общения)
+AiService —              взаимодействие с ИИ 
+
+
+	2) /Bot (Модуль управления программой)
+TradingBot —             основной класс бота
+BotCommandHandler —      маршрутизация команд
+MessageSender —          удобство отправки сообщений
+ButtonManager —          генерация кнопок
+TelegramUser —           пользователь (уровни доступа)
+UserStorage —            управление пользователями и уровнями доступа
+
+
+	3) /Bybit (Модуль взаимодействия с биржей)
+/auth
+BybitAuthConfig —        ключи от биржи
+/DTO:
+BalanceResponse —        контейнер ответа на баланс
+BybitOrderListResponse — контейнер ответа на список ордеров
+BybitOrderRequest —      создание запроса на ордер
+BybitOrderResponse —     контейнер ответа на создание ордера
+InstrumentInfoResponse — контейнер ответа на мин. размер позиции и шаг
+OrderBookSummary —       (пустой - контейнер для подсчета количества монет в ордерах)
+SetLeverageResponse —    контейнер ответа на установку плеча
+TickerResponse —         контейнер ответа на цену монеты 
+PositionInfo —           (удалено, вернуть для фиксации результатов позиции)
+/http
+BybitHttpClient —        http запросы на биржу
+BybitWebSocketClient —   подписка на изменения цены в реальном времени
+/service
+BybitAccountService —    взаимодействие с аккаунтом (баланс)
+BybitMarketService —     инф по монете, цена, мин. лот, мин. сайз
+BybitMonitorService —    (пустой)сравнение цены из websocket с deal и принятие действий
+BybitOrderService —      управление ордером (создать ордер, tp, sl, плечо)
+
+
+	4) /Deal (Сохранение, проверка, расчёт и планирование выхода из сделок.)
+ActiveDealStore —        хранение активных сделок
+Deal —                   модель сделки
+DealCalculator —         расчёт размера позиции, плеча и капитала
+DealValidator —          проверка корректности значений в сделке
+PartialExitPlanner —     хранилище информации о частичном выходе по TP
+/DTO:
+DealRequest —            контейнер ответа после парсинга
+DealValidationResult —   результат проверки сделки
+PartialExitPlan —        план выхода из сделки
+PositionCalculationResult — (вырезано)
+
+
+	5) /model (модели тикера направления и типа ордера)
+Symbol — тикер 
+Side — направление
+OrderType — тип ордера
+
+
+	6. /monitor (Мониторинг)
+Назначение:
+Отслеживание изменений рыночной цены из Websocket, SL TP, перемещение SL при TP.
+PositionTracker —       (пустой)отслеживание PnL
+PriceMonitor —          реакция на новые цены (обработчик сообщений от)
+StopLossManager —       логика переноса SL
+SubscriptionManager —   (наверное можно вырезать, ведь подписка будет при создании deal) управление подпиской на символы
+
+  	7. /strategy
+AiBasedStrategy —       текущая логика (ИИ + ручные правила)
+FixedRiskStrategy —     пример новой стратегии
+MartingaleStrategy —    пример новой стратегии
+StrategyException —     класс-исключение
+StrategyFactory —       фабрика для выбора стратегии
+TradingStrategy —       интерфейс стратегии
+/config
+StrategyConfig —        дефолтные данные для стратегий (с возможностью установить новые данные)
+/DTO
+StrategyContext —       хранилище поведения стратегий
+
+	8. /util (Утилиты)
+BybitRequestUtils -     генератор сигнатуры
+EmojiUtils -            хранилище эмодзи
+JsonUtils —             работа с JSON
+LoggerUtils -           настройки для логгера
+MathUtils —             формулы расчётов
+ValidationUtils —       вспомогательные методы проверок
+ValuesUtil -            хранилище настроек для бота
+
+
+        9. resources/prompts/ (Промпты)
+Файлы:
+get_signal_prompt.txt — парсинг сигнала

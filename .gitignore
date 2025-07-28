@@ -1,0 +1,82 @@
+# Maven build artifacts
+target/
+!.mvn/wrapper/maven-wrapper.jar
+!**/src/main/**/target/
+!**/src/test/**/target/
+
+# Секреты и локальные конфиги
+.env
+src/main/resources/.env
+.env.local
+.env.*.local
+.env.development
+.env.test
+.env.production
+
+# Конфигурации Spring Boot / Java
+application.properties
+application.yml
+secrets/
+/secrets/
+
+# Ключи и сертификаты
+*.key
+*.jks
+*.pem
+*.keystore
+
+# Логи
+*.log
+logs/
+*.log.*
+log/
+
+# Кэш, временные файлы
+.cache
+tmp/
+temp/
+/native/target/
+/out/
+
+# JAR/WAR-файлы (если собираешь вручную)
+*.jar
+*.war
+*.class
+
+# Maven wrapper (оставляем, т.к. нужен для CI/CD)
+.mvn/wrapper/maven-wrapper.jar
+.mvn/wrapper/maven-wrapper.properties
+
+### IntelliJ IDEA ###
+.idea/
+*.iws
+*.iml
+*.ipr
+/.idea/modules.xml
+/.idea/jarRepositories.xml
+/.idea/compiler.xml
+/.idea/libraries/
+
+### Eclipse ###
+.project
+.classpath
+.settings/
+.apt_generated
+.factorypath
+.springBeans
+.sts4-cache
+
+### NetBeans ###
+/nbproject/private/
+.nb-gradle/
+build/
+!**/src/main/**/build/
+!**/src/test/**/build/
+/dist/
+/nbdist/
+
+### VS Code ###
+.vscode/
+
+### Mac OS ###
+.DS_Store
