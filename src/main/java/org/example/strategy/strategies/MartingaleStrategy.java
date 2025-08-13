@@ -1,7 +1,6 @@
-package org.example.strategy;
+package org.example.strategy.strategies;
 
 import org.example.bybit.dto.TickerResponse;
-import org.example.deal.Deal;
 import org.example.deal.dto.PartialExitPlan;
 import org.example.strategy.config.StrategyConfig;
 import org.example.strategy.dto.StrategyContext;

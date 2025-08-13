@@ -7,7 +7,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 
-public class ValuesUtil {
+public class  ValuesUtil {
     @Getter
     private static final double defaultSlPercent = 0.10;
     @Getter
@@ -30,9 +30,6 @@ public class ValuesUtil {
         DEFAULT_TP_EXIT_RULES.put(8, new int[]{22, 16, 14, 10, 9, 8, 7, 4});
         DEFAULT_TP_EXIT_RULES.put(9, new int[]{20, 15, 13, 10, 9, 8, 7, 6, 2});
     }
-    /**
-     * Возвращает копию стандартных правил выхода.
-     */
     public static Map<Integer, int[]> getDefaultTpExitRules() {
         // Создаем глубокую копию, так как массивы int[] изменяемы
         Map<Integer, int[]> copy = new HashMap<>();
@@ -44,13 +41,16 @@ public class ValuesUtil {
 
 
     private static final Map<Double, Integer> DEFAULT_PNL_TP_EXIT_RULES = new HashMap<>();
-
     static {
-        // Пример дефолтных правил: при достижении 8%, 15%, 23% PnL
-        // закрывать 50%, 25%, 12% от позиции соответственно.
-        DEFAULT_PNL_TP_EXIT_RULES.put(8.0, 50);
-        DEFAULT_PNL_TP_EXIT_RULES.put(15.0, 25);
-        DEFAULT_PNL_TP_EXIT_RULES.put(23.0, 12);
+        Double firstPnlValue = 8.0;
+        Double secondPnlValue = 15.0;
+        Double thirdPnlValue = 23.0;
+        Integer firstFixPositionPresentage = 50;
+        Integer secondFixPositionPresentage = 25;
+        Integer thirdFixPositionPresentage = 12;
+        DEFAULT_PNL_TP_EXIT_RULES.put(firstPnlValue, firstFixPositionPresentage);
+        DEFAULT_PNL_TP_EXIT_RULES.put(secondPnlValue, secondFixPositionPresentage);
+        DEFAULT_PNL_TP_EXIT_RULES.put(thirdPnlValue, thirdFixPositionPresentage);
 
     }
 

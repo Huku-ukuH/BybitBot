@@ -7,10 +7,12 @@ import org.example.model.Symbol;
 import org.example.model.Direction;
 import org.example.model.EntryType;
 import org.example.deal.dto.DealRequest;
-import org.example.strategy.StrategyFactory;
-import org.example.strategy.TradingStrategy;
+import org.example.monitor.dto.PositionInfo;
+import org.example.strategy.strategies.StrategyFactory;
+import org.example.strategy.strategies.TradingStrategy;
 import org.example.util.LoggerUtils;
 
+import java.awt.image.CropImageFilter;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -18,7 +20,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 @Setter
 public class Deal {
     // === Основные поля сделки ===
-    private final String id;  // Уникальный ID сделки
+    private String id;  // Уникальный ID сделки
     private Symbol symbol;
     private Direction direction;
     private EntryType entryType;
@@ -27,15 +29,15 @@ public class Deal {
     private Double potentialLoss;
     private List<Double> takeProfits;
     private double positionSize;
-    private int leverageUsed;
+    private double leverageUsed;
     private double requiredCapital;
     private String note;
     private long chatId;
+    private PositionInfo positionInfo;
 
     private String strategyName = "ai";
     private transient TradingStrategy strategy;
 
-    private boolean minQty = false;
     private boolean active = true;
     private boolean positivePnL = false;
     private List<ExitStep> executedExits = new ArrayList<>();
@@ -43,7 +45,7 @@ public class Deal {
 
     public Deal(Symbol symbol, Direction direction, EntryType entryType, Double entryPrice,
                 Double stopLoss, List<Double> takeProfits) {
-        this.id = UUID.randomUUID().toString();
+        this.id = "default";
         this.symbol = symbol;
         this.direction = direction;
         this.entryType = entryType;
@@ -114,6 +116,22 @@ public class Deal {
         }
     }
 
+
+    public void updateFromPosition(PositionInfo positionInfo){
+        if (positionInfo == null || !this.symbol.getSymbol().equals(positionInfo.getSymbol())) {
+            return;
+        }
+        this.positionInfo = positionInfo;
+        leverageUsed = positionInfo.getLeverage();
+        positionSize = positionInfo.getSize();
+        potentialLoss = "посчитать возможный убыток в DEAL CALCULATOR"
+                //и так далее
+
+        // Логируем изменения (опционально)
+        LoggerUtils.logDebug("Обновлена инфа по позиции:" + "\nupl=" + positionInfo.getUnrealizedPnl() + "\nrpl=" + positionInfo.getRealizedPnl());
+
+        //и прочие методы обновления полей стратегии
+    }
     // === Логика управления сделкой ===
 
     /**
@@ -163,47 +181,7 @@ public class Deal {
         }
     }
 
-    /**
-     * Рассчитывает прибыль/убыток (PnL) на основе текущей цены.
-     *
-     * @param currentPrice Текущая рыночная цена.
-     * @return PnL в абсолютных единицах (например, USDT).
-     */
-    public double calculatePnL(double currentPrice) {
-        if (positionSize == 0 || entryPrice == null) {
-            LoggerUtils.logDebug("PnL не может быть рассчитан: positionSize=" + positionSize + ", entryPrice=" + entryPrice + " для сделки " + this.id);
-            return 0.0;
-        }
 
-        double profitPerUnit;
-        if (direction == Direction.LONG) {
-            profitPerUnit = currentPrice - entryPrice;
-        } else {
-            profitPerUnit = entryPrice - currentPrice;
-        }
-
-        double pnl = profitPerUnit * positionSize;
-        LoggerUtils.logInfo("Рассчитан PnL для сделки " + this.id + ": " + pnl + " (цена=" + currentPrice + ")");
-        return pnl;
-    }
-
-    /**
-     * Рассчитывает возврат на инвестиции (ROI) в процентах.
-     *
-     * @param currentPrice Текущая рыночная цена.
-     * @return ROI в процентах.
-     */
-    public double calculateROI(double currentPrice) {
-        if (requiredCapital <= 0) {
-            LoggerUtils.logDebug("ROI не может быть рассчитан: requiredCapital=" + requiredCapital + " для сделки " + this.id);
-            return 0.0;
-        }
-
-        double pnl = calculatePnL(currentPrice);
-        double roi = (pnl / requiredCapital) * 100;
-        LoggerUtils.logInfo("Рассчитан ROI для сделки " + this.id + ": " + String.format("%.2f", roi) + "%");
-        return roi;
-    }
 
     /**
      * Возвращает количество оставшихся (еще не выполненных) TP.
@@ -222,6 +200,13 @@ public class Deal {
         int remaining = count.get();
         LoggerUtils.logInfo("Оставшиеся TP для сделки " + this.id + ": " + remaining);
         return remaining;
+    }
+    public boolean isPositivePNL() {
+        if (positionInfo != null) {
+            return positionInfo.getUnrealizedPnl() > 0;
+        }
+        LoggerUtils.logInfo("инфо по pnl и roi или придумать куда ее воткнуть и где применять" + );
+        return false;
     }
 
     @Override

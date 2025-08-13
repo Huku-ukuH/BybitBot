@@ -1,5 +1,5 @@
 
-package org.example.strategy;
+package org.example.strategy.strategies;
 
 import org.example.bybit.dto.TickerResponse;
 import org.example.deal.Deal;
@@ -9,19 +9,29 @@ import org.example.strategy.config.StrategyConfig;
 import org.example.strategy.dto.StrategyContext;
 import org.example.util.LoggerUtils;
 import org.example.strategy.params.PartialExitPlanner;
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.HashSet;
+
+import java.util.*;
 
 /**
  * Базовая стратегия, реализующая стандартную логику управления сделкой.
  */
 public class BasedStrategy implements TradingStrategy {
+    private final StrategyConfig config;
 
-    private final StrategyConfig config = new StrategyConfig();
-    // Простое множество для отслеживания уже сработавших уровней PnL
+    public BasedStrategy() {
+        this.config = createConfig();
+    }
+    protected StrategyConfig createConfig() {
+        return new StrategyConfig(
+                null,
+                10.0,
+                new int[]{5, 10, 20},
+                15.0,
+                null,
+                null
+        );
+    }
+
     private final Set<Double> triggeredPnlLevels = new HashSet<>();
 
     @Override
@@ -109,7 +119,7 @@ public class BasedStrategy implements TradingStrategy {
         // Проверяем, достигнуты ли уровни PnL
         for (Map.Entry<Double, Integer> ruleEntry : pnlRules.entrySet()) {
             double targetPnlLevel = ruleEntry.getKey() * deal.getLeverageUsed();
-            int exitPercentage = ruleEntry.getValue() * deal.getLeverageUsed();
+            double exitPercentage = ruleEntry.getValue() * deal.getLeverageUsed();
 
             boolean levelReached = (direction == Direction.LONG && pnlPercent >= targetPnlLevel) ||
                     (direction == Direction.SHORT && pnlPercent >= targetPnlLevel);

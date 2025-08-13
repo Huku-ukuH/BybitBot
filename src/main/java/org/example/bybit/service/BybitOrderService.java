@@ -29,7 +29,7 @@ public class BybitOrderService {
     public BybitOrderResponse placeOrder(BybitOrderRequest request, Deal deal) {
         ValidationUtils.checkNotNull(deal, "Deal cannot be null");
         try {
-            // Отправка основного ордера
+
             String jsonBody = JsonUtils.toJson(request);
             BybitOrderResponse response = bybitHttpClient.signedPost("/v5/order/create", jsonBody, BybitOrderResponse.class);
 
@@ -70,7 +70,7 @@ public class BybitOrderService {
         return true;
     }
 
-
+//тут надо разобраться!!!
     public void placePartialTakeProfits(
             Deal deal,
             MessageSender messageSender,
@@ -91,7 +91,7 @@ public class BybitOrderService {
         double minQty = bybitMarketService.getMinOrderQty(symbol);
 
         // Если сделка слишком мала — установить только 1 ближайший TP
-        if (deal.isMinQty()) {
+        if (bybitMarketService.getMinOrderQty(deal.getSymbol().toString()) == deal.getPositionSize()) {
             double tpPrice = originalTakeProfits.get(0);
             double qty = bybitMarketService.roundLotSize(symbol, totalSize);
 

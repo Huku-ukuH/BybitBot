@@ -6,7 +6,7 @@ import org.example.model.Direction;
 import org.example.util.LoggerUtils;
 import org.example.util.ValidationUtils;
 import org.example.strategy.config.StrategyConfig; // <-- НОВЫЙ ИМПОРТ
-import org.example.strategy.TradingStrategy;   // <-- НОВЫЙ ИМПОРТ
+import org.example.strategy.strategies.TradingStrategy;   // <-- НОВЫЙ ИМПОРТ
 
 public class DealCalculator {
 
@@ -125,7 +125,6 @@ public class DealCalculator {
 
         if (roundedSize < minQty) {
             LoggerUtils.logWarn("Округлённый объём меньше minQty. Устанавливаем позицию = minQty.");
-            deal.setMinQty(true);
             roundedSize = minQty;
         }
 

@@ -1,0 +1,26 @@
+    /**
+     * Фабричный метод для создания конфигурации.
+     * Может быть переопределён в подклассах.
+     */
+    protected StrategyConfig createConfig() {
+        // Правила выхода по TP
+        Map<Integer, int[]> tpExitRules = new HashMap<>();
+        tpExitRules.put(1, new int[]{50});
+        tpExitRules.put(2, new int[]{30});
+        tpExitRules.put(3, new int[]{20});
+
+        // Правила выхода по PnL
+        Map<Double, Integer> pnlTpExitRules = new HashMap<>();
+        pnlTpExitRules.put(3.0, 50);
+        pnlTpExitRules.put(5.0, 30);
+        pnlTpExitRules.put(7.0, 20);
+
+        return new StrategyConfig(
+                null,                   // customSlPercent → будет из ValuesUtil
+                10.0,                   // maxLossInPosition
+                new int[]{5, 10, 20},   // leverageTrails
+                15.0,                   // warningDistancePercent
+                tpExitRules,
+                pnlTpExitRules
+        );
+    }

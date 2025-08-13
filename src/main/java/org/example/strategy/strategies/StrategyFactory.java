@@ -1,4 +1,4 @@
-package org.example.strategy;
+package org.example.strategy.strategies;
 import org.example.util.LoggerUtils;
 import java.util.ArrayList;
 import java.util.List;

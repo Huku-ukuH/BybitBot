@@ -7,12 +7,9 @@ import org.example.bot.BotCommandHandler;
 import org.example.bot.MessageSender;
 import org.example.bot.TradingBot;
 import org.example.bybit.client.BybitWebSocketClient;
-import org.example.bybit.service.BybitOrderService;
-import org.example.bybit.service.BybitMonitorService;
+import org.example.bybit.service.*;
 import org.example.bybit.auth.BybitAuthConfig;
 import org.example.bybit.client.BybitHttpClient;
-import org.example.bybit.service.BybitAccountService;
-import org.example.bybit.service.BybitMarketService;
 import org.example.deal.ActiveDealStore;
 import org.example.strategy.params.PartialExitPlanner;
 import org.example.monitor.PriceMonitor;
@@ -40,6 +37,7 @@ public class TradingBotApplication {
             BybitAccountService accountService = new BybitAccountService(bybitHttpClient);
             BybitOrderService bybitOrderService = new BybitOrderService(bybitHttpClient);
             BybitMarketService bybitMarketService = new BybitMarketService(bybitHttpClient);
+            BybitPositionTrackerService bybitPositionTrackerService = new BybitPositionTrackerService(bybitHttpClient);
 
 
             BybitMonitorService bybitMonitorService = new BybitMonitorService();  //пока не используется
@@ -50,7 +48,7 @@ public class TradingBotApplication {
 
             BotCommandHandler commandHandler = new BotCommandHandler(
                     aiService, accountService, partialExitPlanner, activeDealStore,
-                    bybitOrderService, bybitMonitorService, bybitMarketService);
+                    bybitOrderService, bybitMonitorService, bybitMarketService, bybitPositionTrackerService);
 
             TradingBot tradingBot = new TradingBot(commandHandler);
             MessageSender messageSender = new MessageSender(tradingBot);

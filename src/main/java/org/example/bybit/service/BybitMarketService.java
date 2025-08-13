@@ -1,4 +1,3 @@
-// Файл: src/main/java/org/example/bybit/service/BybitMarketService.java
 package org.example.bybit.service;
 
 import org.example.bybit.dto.InstrumentInfoResponse;
@@ -47,6 +46,7 @@ public class BybitMarketService {
     public double getMinOrderQty(String symbol) {
         InstrumentInfoResponse.Instrument instrumentInfo = getInstrumentInfoFromCacheOrApi(symbol);
         double minOrderQty = instrumentInfo.getLotSizeFilter().getMinOrderQty();
+        LoggerUtils.logDebug("Информация о " + symbol + " получена из кэша. MinOrderQty =" + minOrderQty);
         if (minOrderQty <= 0) {
             throw new IllegalStateException("Некорректный minOrderQty для " + symbol + ": " + minOrderQty);
         }
@@ -58,6 +58,7 @@ public class BybitMarketService {
     public double getLotSizeStep(String symbol) {
         InstrumentInfoResponse.Instrument instrumentInfo = getInstrumentInfoFromCacheOrApi(symbol);
         double qtyStep = instrumentInfo.getLotSizeFilter().getQtyStep();
+        LoggerUtils.logDebug("Информация о " + symbol + " получена из кэша. qtyStep =" + qtyStep);
         if (qtyStep <= 0) {
             throw new IllegalStateException("Неверный qtyStep для символа: " + symbol + " (qtyStep=" + qtyStep + ")");
         }
@@ -75,6 +76,8 @@ public class BybitMarketService {
 
         double stepSize = instrumentInfo.getLotSizeFilter().getQtyStep();
         double minQty = instrumentInfo.getLotSizeFilter().getMinOrderQty();
+        LoggerUtils.logDebug("Информация о stepSize и minQty для" + symbol + " получена из кэша.\n stepSize =" + stepSize + "\nminQty =" + minQty);
+
 
         if (stepSize <= 0 || minQty <= 0) {
             throw new IllegalStateException("Неверные параметры qtyStep или minQty для " + symbol +
@@ -105,7 +108,6 @@ public class BybitMarketService {
 
         InstrumentInfoResponse.Instrument cachedInfo = instrumentInfoCache.get(symbol);
         if (cachedInfo != null) {
-            LoggerUtils.logDebug("Информация об инструменте " + symbol + " получена из кэша.");
             return cachedInfo;
         }
 

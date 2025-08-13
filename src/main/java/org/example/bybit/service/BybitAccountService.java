@@ -1,6 +1,6 @@
 package org.example.bybit.service;
 
-import lombok.AllArgsConstructor;
+import lombok.Getter;
 import org.example.bybit.dto.BalanceResponse;
 import org.example.bybit.client.BybitHttpClient;
 import org.example.util.LoggerUtils;
@@ -8,9 +8,14 @@ import org.example.util.LoggerUtils;
 import java.util.Map;
 import java.util.Objects;
 
-@AllArgsConstructor
 public class BybitAccountService {
     private final BybitHttpClient httpClient;
+    @Getter
+    private double lastUsdtBalanceInfo;
+    public BybitAccountService(BybitHttpClient httpClient) {
+        this.httpClient = httpClient;
+    }
+
 
     /**
      * Получает баланс USDT на деривативном аккаунте (accountType = CONTRACT).
@@ -30,12 +35,14 @@ public class BybitAccountService {
         }
 
         // Получаем totalAvailableBalance из первого аккаунта (если нужно — добавь фильтрацию по accountType)
-        return response.getResult().getList().stream()
+        lastUsdtBalanceInfo = response.getResult().getList().stream()
                 .map(BalanceResponse.BalanceAccount::getTotalAvailableBalance)
                 .filter(Objects::nonNull)
                 .mapToDouble(Double::parseDouble)
                 .findFirst()
                 .orElseThrow(() -> new RuntimeException("Поле totalAvailableBalance не найдено"));
+
+        return lastUsdtBalanceInfo;
     }
 
 

@@ -24,7 +24,4 @@ public class BybitRequestUtils {
         }
         return sb.toString();
     }
-    public static long getCurrentTimestamp() {
-        return Instant.now().toEpochMilli();
-    }
 }
