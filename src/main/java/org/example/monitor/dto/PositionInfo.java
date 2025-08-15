@@ -3,6 +3,7 @@ package org.example.monitor.dto;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Data;
+import lombok.Getter;
 import org.example.model.Direction;
 
 /**
@@ -11,7 +12,7 @@ import org.example.model.Direction;
  */
 @Data
 @JsonIgnoreProperties(ignoreUnknown = true)
-
+@Getter
 public class PositionInfo {
 
     @JsonProperty("symbol")
@@ -48,36 +49,18 @@ public class PositionInfo {
 
 
     // --- Дополнительные удобные методы ---
-
-    /**
-     * Является ли позиция активной (не закрыта и не в ликвидации)
-     */
-    public boolean isActive() {
-        return "Normal".equals(positionStatus);
-    }
-
-    /**
-     * Возвращает направление позиции в виде Direction.LONG / Direction.SHORT
-     */
-    public Direction getDirection() {
-        return "Buy".equalsIgnoreCase(side) ? Direction.LONG : Direction.SHORT;
-    }
-
-    /**
-     * Нереализованная прибыль в процентах от изолированной маржи (ROI)
-     * Это и есть ROI для текущей позиции.
-     */
     public double getRoi() {
-        if (isolatedMargin == 0) {
+        if (leverage == 0 || positionValue == 0) {
             return 0.0;
         }
-        return (unrealizedPnl / isolatedMargin) * 100.0;
+        double initialMargin = positionValue / leverage;
+        if (initialMargin == 0) return 0.0;
+        return (unrealizedPnl / initialMargin) * 100.0;
+    }
+    public double getPotentialLoss() {
+        double delta = Math.abs(entryPrice - stopLoss);
+        return Math.round(size * delta * 1000.0) / 1000.0;
     }
 
-    /**
-     * Удобное строковое представление ROI
-     */
-    public String getRoiFormatted() {
-        return String.format("%.2f%%", getRoi());
-    }
+
 }

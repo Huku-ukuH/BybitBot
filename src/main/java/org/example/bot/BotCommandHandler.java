@@ -45,18 +45,17 @@ public class BotCommandHandler {
     public BotCommandHandler(
             AiService aiService,
             BybitAccountService bybitAccountService,
-            PartialExitPlanner partialExitPlanner,
             ActiveDealStore activeDealStore,
             BybitOrderService bybitOrderService,
             BybitMonitorService bybitMonitorService,
             BybitMarketService bybitMarketService, BybitPositionTrackerService bybitPositionTrackerService) {
         dealCalculator = new DealCalculator(bybitAccountService, bybitMarketService);
+        partialExitPlanner = new PartialExitPlanner();
         this.bybitPositionTrackerService = bybitPositionTrackerService;
         this.aiService = aiService;
         this.bybitAccountService = bybitAccountService;
         this.activeDealStore = activeDealStore;
         this.bybitOrderService = bybitOrderService;
-        this.partialExitPlanner = partialExitPlanner;
         this.bybitMarketService = bybitMarketService;
         this.bybitMonitorService = bybitMonitorService;
     }
@@ -214,7 +213,7 @@ public class BotCommandHandler {
                     result.append(EmojiUtils.CROSS + " SL не установлен: ").append(slResponse.getRetMsg()).append("\n");
                 }
             }
-
+// УСТАРЕВШИЙ МЕТОД placePartialTakeProfits, новый подход это центр управления выходами из позиции
             bybitOrderService.placePartialTakeProfits(deal, messageSender, chatId, result, bybitMarketService);
 
             // Уведомляем пользователя

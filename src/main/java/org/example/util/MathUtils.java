@@ -12,21 +12,6 @@ public class MathUtils {
         return (double) tmp / factor;
     }
 
-    // Сравнение с допустимой погрешностью
-    public static boolean equalsWithPrecision(double a, double b, double precision) {
-        return Math.abs(a - b) < precision;
-    }
-
-    // Проверка, находится ли значение в пределах процента от базового
-    public static boolean isWithinPercentage(double base, double value, double percentage) {
-        double delta = base * (percentage / 100.0);
-        return Math.abs(base - value) <= delta;
-    }
-
-    // Ограничение значения в диапазоне
-    public static double clamp(double value, double min, double max) {
-        return Math.max(min, Math.min(max, value));
-    }
 
     private MathUtils() {
     }

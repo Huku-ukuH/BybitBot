@@ -124,13 +124,7 @@ public class Deal {
         this.positionInfo = positionInfo;
         leverageUsed = positionInfo.getLeverage();
         positionSize = positionInfo.getSize();
-        potentialLoss = "посчитать возможный убыток в DEAL CALCULATOR"
-                //и так далее
-
-        // Логируем изменения (опционально)
-        LoggerUtils.logDebug("Обновлена инфа по позиции:" + "\nupl=" + positionInfo.getUnrealizedPnl() + "\nrpl=" + positionInfo.getRealizedPnl());
-
-        //и прочие методы обновления полей стратегии
+        potentialLoss = positionInfo.getPotentialLoss();
     }
     // === Логика управления сделкой ===
 
@@ -201,13 +195,12 @@ public class Deal {
         LoggerUtils.logInfo("Оставшиеся TP для сделки " + this.id + ": " + remaining);
         return remaining;
     }
-    public boolean isPositivePNL() {
+    public void isPositivePNL() {
         if (positionInfo != null) {
-            return positionInfo.getUnrealizedPnl() > 0;
+            positivePnL = positionInfo.getUnrealizedPnl() > 0;
         }
-        LoggerUtils.logInfo("инфо по pnl и roi или придумать куда ее воткнуть и где применять" + );
-        return false;
     }
+
 
     @Override
     public String toString() {

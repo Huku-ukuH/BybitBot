@@ -71,19 +71,12 @@ public class DealCalculator {
             throw new IllegalStateException("\nНедостаточно средств. Нужно: " + requiredCapital + ", доступно: " + actualBalance);
         }
 
-        // 7. Потенциальный убыток
-        double delta = Math.abs(entryPrice - stopLoss);
-        double potentialLoss = positionSize * delta;
-        potentialLoss = Math.round(potentialLoss * 1000.0) / 1000.0;
-        // deal.setPotencialLoss(potentialLoss); // Возможно, опечатка в "Potencial"?
-        // Предполагая, что поле в Deal называется potencialLoss:
-        deal.setPotentialLoss(potentialLoss);
-
         return String.format(
                 "Размер позиции: %.2f\nСтоп-лосс: %.5f\nПлечо: %dx\nНеобходимый капитал: %.2f USDT",
                 positionSize, deal.getStopLoss(), leverageUsed, requiredCapital
         );
     }
+
 
     // Методы теперь принимают deal и strategyConfig как параметры
 
@@ -161,5 +154,37 @@ public class DealCalculator {
 
     private double fetchBalance() {
         return accountService.getUsdtBalance();
+    }
+
+
+    public double calculateExitQty(Deal deal, int exitPercentage) {
+        ValidationUtils.checkNotNull(deal, "Deal cannot be null");
+        if (exitPercentage <= 0 || exitPercentage > 100) {
+            throw new IllegalArgumentException("Exit percentage must be between 1 and 100. Got: " + exitPercentage);
+        }
+
+        // 1. Рассчитываем "сырой" объём
+        double rawQty = deal.getPositionSize() * exitPercentage / 100.0;
+        LoggerUtils.logDebug("DealCalculator.calculateExitQty: rawQty = " + rawQty + " (positionSize=" + deal.getPositionSize() + ", %=" + exitPercentage + ")");
+
+        // 2. Округляем по шагу лота
+        double roundedQty = bybitMarketService.roundLotSize(deal.getSymbol().toString(), rawQty);
+        LoggerUtils.logDebug("DealCalculator.calculateExitQty: roundedQty = " + roundedQty);
+
+        // 3. Проверяем minQty
+        double minQty = bybitMarketService.getMinOrderQty(deal.getSymbol().toString());
+        if (roundedQty < minQty) {
+            LoggerUtils.logDebug("DealCalculator.calculateExitQty: roundedQty (" + roundedQty + ") < minQty (" + minQty + ") → return 0.0");
+            return 0.0;
+        }
+
+        // 4. Защита: не выходим больше, чем есть
+        if (roundedQty > deal.getPositionSize()) {
+            LoggerUtils.logWarn("DealCalculator.calculateExitQty: exit qty (" + roundedQty + ") > position size (" + deal.getPositionSize() + ") → return 0.0");
+            return 0.0;
+        }
+
+        LoggerUtils.logDebug("DealCalculator.calculateExitQty: exit qty = " + roundedQty);
+        return roundedQty;
     }
 }

@@ -43,11 +43,11 @@ public class TradingBotApplication {
             BybitMonitorService bybitMonitorService = new BybitMonitorService();  //пока не используется
 
             ActiveDealStore activeDealStore = new ActiveDealStore();
-            PartialExitPlanner partialExitPlanner = new PartialExitPlanner();
+
 
 
             BotCommandHandler commandHandler = new BotCommandHandler(
-                    aiService, accountService, partialExitPlanner, activeDealStore,
+                    aiService, accountService, activeDealStore,
                     bybitOrderService, bybitMonitorService, bybitMarketService, bybitPositionTrackerService);
 
             TradingBot tradingBot = new TradingBot(commandHandler);

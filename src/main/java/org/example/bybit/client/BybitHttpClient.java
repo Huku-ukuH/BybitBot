@@ -1,3 +1,4 @@
+// Файл: src/main/java/org/example/bybit/client/BybitHttpClient.java
 package org.example.bybit.client;
 
 import org.example.bybit.auth.BybitAuthConfig;
@@ -20,6 +21,11 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
+/**
+ * HTTP клиент для взаимодействия с API Bybit.
+ * Включает синхронизацию времени, управление подписями для приватных запросов
+ * и ограничение частоты запросов.
+ */
 public class BybitHttpClient {
 
     private final HttpClient client;
@@ -28,6 +34,17 @@ public class BybitHttpClient {
     private long timeOffset = 0; // serverTime - localTime
     private final Object timeLock = new Object();
 
+    // --- Rate Limiter ---
+    // Пример: максимум 100 запросов в минуту, пауза 10 секунд при превышении
+    // TODO: Уточните лимиты для вашего ключа/API Bybit
+    private final RateLimiter rateLimiter = new RateLimiter(100, TimeUnit.MINUTES.toMillis(1), TimeUnit.SECONDS.toMillis(10));
+    // --------------------
+
+    /**
+     * Конструктор.
+     *
+     * @param authConfig Конфигурация аутентификации Bybit.
+     */
     public BybitHttpClient(BybitAuthConfig authConfig) {
         this.client = HttpClient.newHttpClient();
         this.authConfig = authConfig;
@@ -38,22 +55,41 @@ public class BybitHttpClient {
         } catch (IOException e) {
             LoggerUtils.logError("Не удалось синхронизировать время с Bybit при старте", e);
         } catch (InterruptedException e) {
-            throw new RuntimeException(e);
+            Thread.currentThread().interrupt(); // Восстанавливаем статус прерывания
+            throw new RuntimeException("Поток прерван во время синхронизации времени", e);
         }
 
         // Запускаем периодическую синхронизацию раз в 2 часа
-        ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
+        ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor(runnable -> {
+            Thread t = new Thread(runnable, "BybitTimeSyncThread");
+            t.setDaemon(true); // Позволяем JVM завершиться, даже если поток активен
+            return t;
+        });
         scheduler.scheduleAtFixedRate(() -> {
             try {
                 syncServerTime();
             } catch (IOException e) {
                 LoggerUtils.logError("Ошибка при периодической синхронизации времени с Bybit", e);
             } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                LoggerUtils.logWarn("Поток синхронизации времени прерван.");
                 throw new RuntimeException(e);
             }
         }, 120, 120, TimeUnit.MINUTES);
+        // Не забудьте закрыть scheduler при завершении приложения в TradingBotApplication
+        // scheduler.shutdown();
     }
 
+    /**
+     * Выполняет GET-запрос к публичному эндпоинту API Bybit.
+     *
+     * @param endpoint     Эндпоинт API (например, "/v5/market/tickers").
+     * @param queryParams  Параметры запроса.
+     * @param responseType Класс ожидаемого типа ответа.
+     * @param <T>          Тип ответа.
+     * @return Десериализованный ответ от API.
+     * @throws RuntimeException Если запрос завершился ошибкой.
+     */
     public <T> T get(String endpoint, Map<String, String> queryParams, Class<T> responseType) {
         try {
             String query = buildQueryString(queryParams);
@@ -61,14 +97,21 @@ public class BybitHttpClient {
 
             LoggerUtils.logDebug("GET → endpoint: " + endpoint + ", queryParams: " + queryParams);
 
-            HttpRequest request = HttpRequest.newBuilder()
+            HttpRequest.Builder requestBuilder = HttpRequest.newBuilder()
                     .uri(URI.create(url))
-                    .header("X-BAPI-API-KEY", authConfig.getApiKey())
-                    .GET()
-                    .build();
+                    .GET();
 
-            String body = sendRequest(request);
-            LoggerUtils.logDebug("request: " + request);
+            // Не добавляем API-ключ для публичных эндпоинтов
+            boolean isPublicMarketEndpoint = endpoint != null && endpoint.startsWith("/v5/market/");
+            if (!isPublicMarketEndpoint) {
+                addApiKeyHeader(requestBuilder);
+            } else {
+                LoggerUtils.logDebug("Запрос к публичному эндпоинту " + endpoint + ", заголовок X-BAPI-API-KEY не добавляется.");
+            }
+
+            HttpRequest request = requestBuilder.build();
+
+            String body = sendRequestWithRateLimit(request);
             LoggerUtils.logDebug("GET ← response: " + body);
 
             return JsonUtils.fromJson(body, responseType);
@@ -77,20 +120,33 @@ public class BybitHttpClient {
         }
     }
 
+    /**
+     * Выполняет POST-запрос к приватному эндпоинту API Bybit.
+     *
+     * @param endpoint     Эндпоинт API (например, "/v5/order/create").
+     * @param jsonBody     Тело запроса в формате JSON.
+     * @param responseType Класс ожидаемого типа ответа.
+     * @param <T>          Тип ответа.
+     * @return Десериализованный ответ от API.
+     * @throws RuntimeException Если запрос завершился ошибкой.
+     */
     public <T> T post(String endpoint, String jsonBody, Class<T> responseType) {
         try {
             String url = authConfig.getBaseUrl() + endpoint;
 
             LoggerUtils.logDebug("POST → endpoint: " + endpoint + ", body: " + jsonBody);
 
-            HttpRequest request = HttpRequest.newBuilder()
+            HttpRequest.Builder requestBuilder = HttpRequest.newBuilder()
                     .uri(URI.create(url))
-                    .header("X-BAPI-API-KEY", authConfig.getApiKey())
                     .header("Content-Type", "application/json")
-                    .POST(HttpRequest.BodyPublishers.ofString(jsonBody))
-                    .build();
+                    .POST(HttpRequest.BodyPublishers.ofString(jsonBody));
 
-            String body = sendRequest(request);
+            // Добавляем API-ключ для POST (обычно приватные)
+            addApiKeyHeader(requestBuilder);
+
+            HttpRequest request = requestBuilder.build();
+
+            String body = sendRequestWithRateLimit(request);
             LoggerUtils.logDebug("POST ← response: " + body);
 
             return JsonUtils.fromJson(body, responseType);
@@ -99,10 +155,20 @@ public class BybitHttpClient {
         }
     }
 
+    /**
+     * Выполняет подписанный POST-запрос к приватному эндпоинту API Bybit.
+     *
+     * @param endpoint     Эндпоинт API (например, "/v5/order/create").
+     * @param jsonBody     Тело запроса в формате JSON.
+     * @param responseType Класс ожидаемого типа ответа.
+     * @param <T>          Тип ответа.
+     * @return Десериализованный ответ от API.
+     * @throws RuntimeException Если запрос завершился ошибкой.
+     */
     public <T> T signedPost(String endpoint, String jsonBody, Class<T> responseType) {
         try {
             long timestamp = getTimestamp();
-            String recvWindow = "10000";
+            String recvWindow = "10000"; // Можно сделать настраиваемым через конфиг
 
             String signaturePayload = timestamp + authConfig.getApiKey() + recvWindow + jsonBody;
             String signature = BybitRequestUtils.generateSignature(authConfig.getApiSecret(), signaturePayload);
@@ -119,7 +185,7 @@ public class BybitHttpClient {
                     .POST(HttpRequest.BodyPublishers.ofString(jsonBody))
                     .build();
 
-            String body = sendRequest(request);
+            String body = sendRequestWithRateLimit(request);
             LoggerUtils.logDebug("SIGNED POST ← response: " + body);
 
             return JsonUtils.fromJson(body, responseType);
@@ -128,9 +194,19 @@ public class BybitHttpClient {
         }
     }
 
+    /**
+     * Выполняет подписанный GET-запрос к приватному эндпоинту API Bybit.
+     *
+     * @param endpoint     Эндпоинт API (например, "/v5/order/realtime").
+     * @param queryParams  Параметры запроса.
+     * @param responseType Класс ожидаемого типа ответа.
+     * @param <T>          Тип ответа.
+     * @return Десериализованный ответ от API.
+     * @throws RuntimeException Если запрос завершился ошибкой.
+     */
     public <T> T signedGet(String endpoint, Map<String, String> queryParams, Class<T> responseType) {
         try {
-            String recvWindow = "10000";
+            String recvWindow = "10000"; // Можно сделать настраиваемым через конфиг
             String query = buildQueryString(queryParams);
             String queryWithPrefix = query.isEmpty() ? "" : "?" + query;
             long timestamp = getTimestamp();
@@ -146,7 +222,7 @@ public class BybitHttpClient {
                     .GET()
                     .build();
 
-            String bodyResponse = sendRequest(request);
+            String bodyResponse = sendRequestWithRateLimit(request);
             LoggerUtils.logDebug("SIGNED GET → endpoint: " + endpoint + ", queryParams: " + queryParams +
                     "\nSIGNED GET ← response:" + bodyResponse);
 
@@ -157,7 +233,9 @@ public class BybitHttpClient {
     }
 
     /**
-     * Возвращает синхронизированное с сервером Bybit время в миллисекундах
+     * Возвращает синхронизированное с сервером Bybit время в миллисекундах.
+     *
+     * @return Синхронизированное время.
      */
     private long getTimestamp() {
         synchronized (timeLock) {
@@ -166,7 +244,10 @@ public class BybitHttpClient {
     }
 
     /**
-     * Синхронизирует локальное время с серверным временем Bybit
+     * Синхронизирует локальное время с серверным временем Bybit.
+     *
+     * @throws IOException          Если возникла ошибка ввода-вывода при запросе.
+     * @throws InterruptedException Если поток был прерван.
      */
     private void syncServerTime() throws IOException, InterruptedException {
         HttpRequest request = HttpRequest.newBuilder()
@@ -177,7 +258,7 @@ public class BybitHttpClient {
 
         HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
         if (response.statusCode() != 200) {
-            throw new IOException("Не удалось получить время с Bybit: " + response.body());
+            throw new IOException("Не удалось получить время с Bybit: HTTP " + response.statusCode() + " - " + response.body());
         }
 
         try {
@@ -222,24 +303,77 @@ public class BybitHttpClient {
         }
     }
 
+    /**
+     * Отправляет HTTP-запрос и возвращает тело ответа.
+     * Выполняет проверку кода состояния HTTP.
+     *
+     * @param request HTTP-запрос.
+     * @return Тело ответа.
+     * @throws IOException          Если возникла ошибка ввода-вывода.
+     * @throws InterruptedException Если поток был прерван.
+     */
     private String sendRequest(HttpRequest request) throws IOException, InterruptedException {
         HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
         if (response.statusCode() >= 200 && response.statusCode() < 300) {
             return response.body();
         } else {
+            // Логируем полный запрос для отладки
+            LoggerUtils.logWarn("HTTP-запрос завершился ошибкой: " + request.method() + " " + request.uri() +
+                    " -> HTTP " + response.statusCode() + " - " + response.body());
             throw new RuntimeException("HTTP " + response.statusCode() + ": " + response.body());
         }
     }
 
+    /**
+     * Отправляет HTTP-запрос с учетом ограничения частоты.
+     * Перед отправкой вызывает {@link RateLimiter#acquire()}.
+     *
+     * @param request HTTP-запрос.
+     * @return Тело ответа.
+     * @throws IOException          Если возникла ошибка ввода-вывода.
+     * @throws InterruptedException Если поток был прерван (включая паузу в RateLimiter).
+     */
+    private String sendRequestWithRateLimit(HttpRequest request) throws IOException, InterruptedException {
+        // 1. Проверяем лимит перед отправкой
+        rateLimiter.acquire();
+        LoggerUtils.logDebug("RateLimiter: Запрос разрешен. Отправка " + request.method() + " " + request.uri());
+
+        // 2. Отправляем запрос
+        return sendRequest(request);
+    }
+
+    /**
+     * Строит строку запроса из карты параметров.
+     *
+     * @param params Карта параметров.
+     * @return Строка запроса (без '?' в начале).
+     */
     private String buildQueryString(Map<String, String> params) {
         if (params == null || params.isEmpty()) return "";
         StringBuilder sb = new StringBuilder();
         for (Map.Entry<String, String> entry : params.entrySet()) {
             if (sb.length() > 0) sb.append("&");
-            sb.append(URLEncoder.encode(entry.getKey(), StandardCharsets.UTF_8));
+            // Убедимся, что ключ и значение не null перед кодированием
+            String key = entry.getKey() != null ? entry.getKey() : "";
+            String value = entry.getValue() != null ? entry.getValue() : "";
+            sb.append(URLEncoder.encode(key, StandardCharsets.UTF_8));
             sb.append("=");
-            sb.append(URLEncoder.encode(entry.getValue(), StandardCharsets.UTF_8));
+            sb.append(URLEncoder.encode(value, StandardCharsets.UTF_8));
         }
         return sb.toString();
+    }
+
+    /**
+     * Добавляет заголовок X-BAPI-API-KEY к запросу, если ключ доступен.
+     *
+     * @param requestBuilder Строитель HTTP-запроса.
+     */
+    private void addApiKeyHeader(HttpRequest.Builder requestBuilder) {
+        String apiKey = authConfig.getApiKey();
+        if (apiKey != null && !apiKey.isEmpty()) {
+            requestBuilder.header("X-BAPI-API-KEY", apiKey);
+        } else {
+            LoggerUtils.logWarn("API ключ отсутствует или пуст. Заголовок X-BAPI-API-KEY не будет добавлен.");
+        }
     }
 }

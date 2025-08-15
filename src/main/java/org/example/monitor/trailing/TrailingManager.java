@@ -3,6 +3,8 @@ package org.example.monitor.trailing;
 import org.example.bybit.dto.TickerResponse;
 import org.example.bybit.service.BybitOrderService;
 import org.example.deal.Deal;
+import org.example.model.Direction;
+import org.example.model.EntryType;
 import org.example.util.LoggerUtils;
 
 import java.util.concurrent.ConcurrentHashMap;
