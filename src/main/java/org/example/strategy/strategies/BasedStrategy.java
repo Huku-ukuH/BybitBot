@@ -2,13 +2,15 @@
 package org.example.strategy.strategies;
 
 import org.example.bybit.dto.TickerResponse;
+import org.example.bybit.service.BybitAccountService;
 import org.example.deal.Deal;
-import org.example.deal.dto.PartialExitPlan;
+import org.example.strategy.params.ExitPlan;
 import org.example.model.Direction;
 import org.example.strategy.config.StrategyConfig;
 import org.example.strategy.dto.StrategyContext;
 import org.example.util.LoggerUtils;
 import org.example.strategy.params.PartialExitPlanner;
+import org.example.util.ValuesUtil;
 
 import java.util.*;
 
@@ -16,7 +18,7 @@ import java.util.*;
  * Базовая стратегия, реализующая стандартную логику управления сделкой.
  */
 public class BasedStrategy implements TradingStrategy {
-    private final StrategyConfig config;
+    private StrategyConfig config;
 
     public BasedStrategy() {
         this.config = createConfig();
@@ -24,9 +26,9 @@ public class BasedStrategy implements TradingStrategy {
     protected StrategyConfig createConfig() {
         return new StrategyConfig(
                 null,
-                10.0,
-                new int[]{5, 10, 20},
-                15.0,
+                null,
+                new int[]{10, 20, 5},
+                null,
                 null,
                 null
         );
@@ -40,26 +42,38 @@ public class BasedStrategy implements TradingStrategy {
     }
 
     @Override
-    public List<PartialExitPlan> planExit(StrategyContext context) throws StrategyException {
-        Deal deal = context.getActiveDeal();
-        if (deal == null || deal.getTakeProfits().isEmpty()) {
-            LoggerUtils.logWarn("BasedStrategy: Нет активной сделки или TP для планирования выхода.");
-            return Collections.emptyList();
+    public ExitPlan planExit(Deal deal) {
+        if (deal == null) {
+            LoggerUtils.logWarn("BasedStrategy: Сделка null.");
+            return null;
         }
 
         StrategyConfig config = this.getConfig();
-        Map<Integer, int[]> rules = config.getTpExitRules();
 
-        PartialExitPlanner planner = new PartialExitPlanner();
-        PartialExitPlan plan = planner.planExit(deal.getTakeProfits(), rules);
+        // 1. Сначала пробуем создать план по TP
+        if (deal.getTakeProfits() != null && !deal.getTakeProfits().isEmpty()) {
+            List<ExitPlan.ExitStep> steps = new PartialExitPlanner()
+                    .planExit(deal.getTakeProfits(), config.getTpExitRules());
 
-        if (plan != null) {
-            LoggerUtils.logInfo("BasedStrategy: Создан план выхода с " + plan.getPartialExits().size() + " шагами.");
-            return Collections.singletonList(plan);
-        } else {
-            LoggerUtils.logWarn("BasedStrategy: PartialExitPlanner не смог создать план.");
-            return Collections.emptyList();
+            if (!steps.isEmpty()) {
+                LoggerUtils.logInfo("BasedStrategy: План выхода по TP создан с " + steps.size() + " шагами.");
+                return new ExitPlan(steps, ExitPlan.ExitType.TP);
+            }
         }
+
+        // 2. Если TP нет или не удалось создать — пробуем PnL
+        Map<Double, Integer> pnlRules = config.getPnlTpExitRules();
+        if (pnlRules != null && !pnlRules.isEmpty()) {
+            ExitPlan plan = ExitPlan.fromPnl(pnlRules, deal.getEntryPrice());
+            if (!plan.getSteps().isEmpty()) {
+                LoggerUtils.logInfo("BasedStrategy: План выхода по PnL создан.");
+                return plan;
+            }
+        }
+
+        // 3. Ничего не подошло
+        LoggerUtils.logWarn("BasedStrategy: Не удалось создать план выхода — нет TP и нет PnL-правил.");
+        return null;
     }
 
     @Override
@@ -150,5 +164,12 @@ public class BasedStrategy implements TradingStrategy {
         LoggerUtils.logWarn("BasedStrategy: Сработал SL.");
         // Очищаем отслеживаемые уровни при закрытии сделки
         triggeredPnlLevels.clear();
+    }
+    @Override
+    public double lossUpdate(BybitAccountService bybitAccountService) {
+        double updateLoss = bybitAccountService.getUsdtBalance()/100 * ValuesUtil.getDefaultLossPrecent();
+        config = new StrategyConfig(null, updateLoss, new int[]{5, 10, 20}, 15.0, null, null
+        );
+        return updateLoss;
     }
 }

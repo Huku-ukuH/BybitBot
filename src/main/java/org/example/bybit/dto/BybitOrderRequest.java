@@ -5,9 +5,7 @@ import lombok.NoArgsConstructor;
 import org.example.deal.Deal;
 import org.example.model.Direction;
 
-import java.util.Collections;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 
 /**
@@ -24,17 +22,26 @@ public class BybitOrderRequest {
     private String qty;
     private String price;      // В данном случае можно использовать entryPrice как цену лимитного входа
     private String timeInForce = "GTC";
-    private Boolean reduceOnly = false; // по умолчанию — вход, не выход
+    private Boolean reduceOnly;
 
-    public BybitOrderRequest(Deal deal) {
+    public BybitOrderRequest(Deal deal) { //конструктор на вход
         this.symbol = deal.getSymbol().toString();
         this.orderType = deal.getEntryType().toString().toLowerCase(); // "market" или "limit"
         this.side = deal.getDirection() == Direction.LONG ? "Buy" : "Sell";
         this.qty = String.valueOf(deal.getPositionSize());
         this.price = deal.getEntryPrice() != null ? String.valueOf(deal.getEntryPrice()) : null;
+        reduceOnly = false;// по умолчанию — вход, не выход
     }
 
-
+    public BybitOrderRequest(Deal deal, double price, double qty) { //конструктор для выхода
+        this.symbol = deal.getSymbol().toString();
+        this.orderType = "Limit";
+        this.side = deal.getDirection() == Direction.LONG ? "Sell" : "Buy";
+        this.qty = String.format("%.3f", qty);        // форматируем количество
+        this.price = String.valueOf( price);    // форматируем цену
+        this.reduceOnly = true; // Критически важно: только уменьшение позиции
+        this.timeInForce = "GTC"; // Good 'Til Canceled
+    }
 
     public Map<String, String> toParamMap() {
         Map<String, String> params = new HashMap<>();

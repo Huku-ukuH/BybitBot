@@ -9,14 +9,18 @@ import java.util.Map;
 
 public class  ValuesUtil {
     @Getter
-    private static final double defaultSlPercent = 0.10;
+    //значение-процент депозита который можно потерять за сделку
+    private static final double defaultLossPrecent = 1;
     @Getter
-    private static final double defaultMaxLossInPosition = 7; // Предполагая, что это теперь double
+    //процент для предупреждения о слишком дальнем тейке или стопе
+    private static final double warningDistancePercent = 30.0;
     @Getter
+    //процент отступа для стоп лосса по умолчанию
+    private static final double defaultSlPercent = 0.20;
+    @Getter
+    //порядок проверки плечей для позиции
     private static final int[] defaultLeverageTrails = {20, 15, 10, 7};
-    @Getter
-    private static final double warningDistancePercent = 20.0;
-
+    //правила выхода - количество тейков - %позиции на тейк
     private static final Map<Integer, int[]> DEFAULT_TP_EXIT_RULES = new HashMap<>();
 
     static {
@@ -30,16 +34,7 @@ public class  ValuesUtil {
         DEFAULT_TP_EXIT_RULES.put(8, new int[]{22, 16, 14, 10, 9, 8, 7, 4});
         DEFAULT_TP_EXIT_RULES.put(9, new int[]{20, 15, 13, 10, 9, 8, 7, 6, 2});
     }
-    public static Map<Integer, int[]> getDefaultTpExitRules() {
-        // Создаем глубокую копию, так как массивы int[] изменяемы
-        Map<Integer, int[]> copy = new HashMap<>();
-        for (Map.Entry<Integer, int[]> entry : DEFAULT_TP_EXIT_RULES.entrySet()) {
-            copy.put(entry.getKey(), java.util.Arrays.copyOf(entry.getValue(), entry.getValue().length));
-        }
-        return Collections.unmodifiableMap(copy);
-    }
-
-
+    // правила выхода по значению pnl
     private static final Map<Double, Integer> DEFAULT_PNL_TP_EXIT_RULES = new HashMap<>();
     static {
         Double firstPnlValue = 8.0;
@@ -53,6 +48,16 @@ public class  ValuesUtil {
         DEFAULT_PNL_TP_EXIT_RULES.put(thirdPnlValue, thirdFixPositionPresentage);
 
     }
+
+    public static Map<Integer, int[]> getDefaultTpExitRules() {
+        // Создаем глубокую копию, так как массивы int[] изменяемы
+        Map<Integer, int[]> copy = new HashMap<>();
+        for (Map.Entry<Integer, int[]> entry : DEFAULT_TP_EXIT_RULES.entrySet()) {
+            copy.put(entry.getKey(), java.util.Arrays.copyOf(entry.getValue(), entry.getValue().length));
+        }
+        return Collections.unmodifiableMap(copy);
+    }
+
 
     /**
      * Возвращает копию стандартных правил выхода по PnL.

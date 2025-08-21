@@ -13,6 +13,7 @@ public class DealCalculator {
     private final BybitMarketService bybitMarketService;
     private final BybitAccountService accountService;
 
+
     public DealCalculator(BybitAccountService accountService, BybitMarketService bybitMarketService) {
         this.bybitMarketService = bybitMarketService;
         this.accountService = accountService;
@@ -102,7 +103,7 @@ public class DealCalculator {
         }
 
         // Теперь получаем максимальный убыток из переданного конфига
-        double maxLoss = strategyConfig.getMaxLossInPosition();
+        double maxLoss = strategyConfig.getMaxLossPrecentInPosition();
         double rawPositionSize = maxLoss / delta; // Используем maxLoss из конфига
         double potentialLoss = rawPositionSize * delta;
 

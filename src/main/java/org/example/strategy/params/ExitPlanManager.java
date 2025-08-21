@@ -1,47 +1,28 @@
 package org.example.strategy.params;
 
+import org.example.bot.MessageSender;
+import org.example.bybit.dto.BybitOrderRequest;
+import org.example.bybit.service.BybitOrderService;
 import org.example.deal.Deal;
-import org.example.deal.dto.PartialExitPlan;
+import org.example.deal.DealCalculator;
 
 public class ExitPlanManager {
 
     private final DealCalculator dealCalculator;
     private final BybitOrderService bybitOrderService;
     private final MessageSender messageSender;
-    private final PartialExitPlanner partialExitPlanner;
 
     public ExitPlanManager(
             DealCalculator dealCalculator,
             BybitOrderService bybitOrderService,
-            MessageSender messageSender,
-            PartialExitPlanner partialExitPlanner) {
+            MessageSender messageSender) {
         this.dealCalculator = dealCalculator;
         this.bybitOrderService = bybitOrderService;
         this.messageSender = messageSender;
-        this.partialExitPlanner = partialExitPlanner;
     }
 
     /**
-     * Создаёт план выхода на основе сделки и её конфигурации.
-     * Если TP есть — использует TP.
-     * Если нет — использует PnL-правила.
-     */
-    public PartialExitPlan.ExitPlan createExitPlan(Deal deal) {
-        StrategyConfig config = deal.getStrategy().getConfig();
-
-        if (deal.getTakeProfits() != null && !deal.getTakeProfits().isEmpty()) {
-            // План по TP
-            PartialExitPlan plan = partialExitPlanner.planExit(deal.getTakeProfits(), config.getTpExitRules());
-            return ExitPlan.fromTpSteps(plan.getPartialExits());
-        } else {
-            // План по PnL
-            return ExitPlan.fromPnlLevels(config.getPnlTpExitRules());
-        }
-    }
-
-    /**
-     * Выполняет план выхода: выставляет ордера.
-     * Использует DealCalculator для проверки размеров.
+     * исполняет план
      */
     public void executeExitPlan(Deal deal, ExitPlan plan, long chatId) {
         if (plan == null || plan.getSteps().isEmpty()) {
@@ -49,35 +30,27 @@ public class ExitPlanManager {
             return;
         }
 
-        StringBuilder sb = new StringBuilder("Результат установки TP:\n");
-
-        for (ExitStep step : plan.getSteps()) {
+        StringBuilder sb = new StringBuilder("Результат установки TP: ");
+        for (ExitPlan.ExitStep step : plan.getSteps()) {
             double tpPrice = step.getTakeProfit();
             int percentage = step.getPercentage();
-
-            // ✅ Используем ваш существующий DealCalculator
             double qty = dealCalculator.calculateExitQty(deal, percentage);
+
             if (qty == 0.0) {
-                sb.append(EmojiUtils.CROSS)
-                        .append(" TP ").append(String.format("%.2f", tpPrice))
-                        .append(": объём < minQty — пропущен\n");
+                sb.append("❌ TP ").append(String.format("%.2f", tpPrice))
+                        .append(": объём < minQty — пропущен ");
                 continue;
             }
 
             try {
-                bybitOrderService.placeLimitExitOrder(deal, tpPrice, qty);
-                sb.append(EmojiUtils.OKAY)
-                        .append(" TP ").append(String.format("%.2f", tpPrice))
-                        .append(" (").append(percentage).append("%, qty ").append(String.format("%.3f", qty)).append(")\n");
+                bybitOrderService.placeOrder(new BybitOrderRequest(deal, tpPrice, qty));
+                sb.append("✅ TP ").append(String.format("%.2f", tpPrice))
+                        .append(" (").append(percentage).append("%, qty ").append(String.format("%.3f", qty)).append(") ");
             } catch (Exception e) {
-                sb.append(EmojiUtils.CROSS)
-                        .append(" Ошибка TP ").append(String.format("%.2f", tpPrice))
-                        .append(": ").append(e.getMessage()).append("\n");
+                sb.append("❌ Ошибка TP ").append(String.format("%.2f", tpPrice))
+                        .append(": ").append(e.getMessage()).append(" ");
             }
         }
-
-        if (sb.length() > 0) {
-            messageSender.send(chatId, sb.toString());
-        }
+        messageSender.send(chatId, sb.toString());
     }
 }

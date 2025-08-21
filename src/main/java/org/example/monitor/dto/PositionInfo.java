@@ -63,4 +63,12 @@ public class PositionInfo {
     }
 
 
+    @Override
+    public String toString() {
+        return
+                "\nUnrealPn:" + unrealizedPnl +
+                ", realPnl:" + realizedPnl +
+                "\nbustPrice:" + bustPrice +
+                "\nisolatedMargin=" + isolatedMargin  +"potentialLoss:" + getPotentialLoss() + "\nROI" + getRoi() ;
+    }
 }

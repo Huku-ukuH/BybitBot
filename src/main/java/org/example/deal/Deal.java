@@ -2,17 +2,16 @@ package org.example.deal;
 
 import lombok.Getter;
 import lombok.Setter;
-import org.example.deal.dto.PartialExitPlan;
 import org.example.model.Symbol;
 import org.example.model.Direction;
 import org.example.model.EntryType;
 import org.example.deal.dto.DealRequest;
 import org.example.monitor.dto.PositionInfo;
+import org.example.strategy.params.ExitPlan;
 import org.example.strategy.strategies.StrategyFactory;
 import org.example.strategy.strategies.TradingStrategy;
 import org.example.util.LoggerUtils;
 
-import java.awt.image.CropImageFilter;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -34,6 +33,9 @@ public class Deal {
     private String note;
     private long chatId;
     private PositionInfo positionInfo;
+    private ExitPlan exitPlan; // План выхода (TP, PnL, Trailing)
+    private List<String> executedTpOrderIds = new ArrayList<>(); // Для трейлинга
+
 
     private String strategyName = "ai";
     private transient TradingStrategy strategy;
@@ -128,23 +130,7 @@ public class Deal {
     }
     // === Логика управления сделкой ===
 
-    /**
-     * Применяет план частичного выхода к сделке.
-     * Добавляет TP из плана в список takeProfits и заполняет карту tpToPercentage.
-     *
-     * @param plan План частичного выхода.
-     */
-    public void applyPartialExitPlan(PartialExitPlan plan) {
-        if (plan == null || plan.getPartialExits() == null) {
-            LoggerUtils.logWarn("Попытка применить null или пустой план PartialExitPlan к сделке " + this.id);
-            return;
-        }
-        for (PartialExitPlan.ExitStep step : plan.getPartialExits()) {
-            tpToPercentage.put(step.getTakeProfit(), step.getPercentage());
-            addTakeProfit(step.getTakeProfit()); // addTakeProfit проверит дубликаты
-        }
-        LoggerUtils.logDebug("План частичного выхода применен к сделке " + this.id);
-    }
+
 
     /**
      * Зафиксирован выход по одному из TP.
@@ -195,10 +181,12 @@ public class Deal {
         LoggerUtils.logInfo("Оставшиеся TP для сделки " + this.id + ": " + remaining);
         return remaining;
     }
-    public void isPositivePNL() {
+    public boolean isPositivePNL() {
         if (positionInfo != null) {
             positivePnL = positionInfo.getUnrealizedPnl() > 0;
+            return positivePnL;
         }
+        return false;
     }
 
 
@@ -214,30 +202,13 @@ public class Deal {
                 "🧠 Стратегия: " + strategyName + "\n"; // Добавляем информацию о стратегии
     }
 
-    public String theBigToString() {
-        StringBuilder sb = new StringBuilder();
-
-        sb.append("🟢").append(symbol)
-                .append(" — ").append(direction.toString().toLowerCase())
-                .append("\n\n");
-
-        sb.append("📌 Вход: ").append(entryType.toString().toLowerCase()).append("\n");
-        sb.append(entryType == EntryType.LIMIT
-                        ? "💸 Price: " + entryPrice
-                        : "💰 Current: " + entryPrice)
-                .append("\n");
-
-        sb.append("🛑 SL: ").append(stopLoss).append("\n");
-        sb.append("✅ TP: ").append(takeProfits).append("\n");
-
-        sb.append("📐QTY ").append(String.format("%.4f", positionSize)).append("\n"); // Форматирование чисел
-        sb.append("🔁LEV: ").append(leverageUsed).append("\n");
-        sb.append("💰CAP: ").append(String.format("%.2f", requiredCapital)).append("\n"); // Форматирование чисел
-        sb.append("🧠 Стратегия: ").append(strategyName).append("\n"); // Добавляем информацию о стратегии
-
-        sb.append("📝 Примечание: ").append(note != null ? note : "-").append("\n");
-        return sb.toString();
+    public StringBuilder positiveDeal() {
+        StringBuilder sb = new StringBuilder(symbol.toString() + "\n");
+        sb.append(isPositivePNL()? "🛑" : "✅ БУ");
+        sb.append(positionInfo.toString());
+        return sb;
     }
+
 
     // === Вспомогательные классы ===
 
@@ -249,14 +220,6 @@ public class Deal {
         public ExitStep(double exitPrice, double exitAmount) {
             this.exitPrice = exitPrice;
             this.exitAmount = exitAmount;
-        }
-
-        @Override
-        public String toString() {
-            return "ExitStep{" +
-                    "exitPrice=" + exitPrice +
-                    ", exitAmount=" + exitAmount +
-                    '}';
         }
     }
 

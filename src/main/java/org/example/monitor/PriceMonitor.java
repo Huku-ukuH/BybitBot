@@ -7,6 +7,7 @@ import org.example.bybit.client.BybitWebSocketClient;
 import org.example.bot.MessageSender;
 import org.example.deal.ActiveDealStore;
 import org.example.deal.Deal;
+import org.example.strategy.params.StopLossManager;
 import org.example.util.LoggerUtils;
 
 import java.util.List;

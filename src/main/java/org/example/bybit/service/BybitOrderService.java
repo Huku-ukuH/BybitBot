@@ -1,23 +1,15 @@
 package org.example.bybit.service;
 
-import org.example.bot.MessageSender;
 import org.example.bybit.dto.BybitOrderRequest;
 import org.example.bybit.dto.BybitOrderResponse;
 import org.example.bybit.dto.SetLeverageResponse;
 import org.example.bybit.dto.BybitOrderListResponse;
 import org.example.bybit.client.BybitHttpClient;
 import org.example.deal.Deal;
-import org.example.strategy.params.PartialExitPlanner;
-import org.example.deal.dto.PartialExitPlan;
 import org.example.model.Direction;
-import org.example.util.EmojiUtils;
 import org.example.util.JsonUtils;
 import org.example.util.LoggerUtils;
-import org.example.util.ValidationUtils;
-
-import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 
 public class BybitOrderService {
@@ -26,8 +18,7 @@ public class BybitOrderService {
     public BybitOrderService(BybitHttpClient bybitHttpClient) {
         this.bybitHttpClient = bybitHttpClient;
     }
-    public BybitOrderResponse placeOrder(BybitOrderRequest request, Deal deal) {
-        ValidationUtils.checkNotNull(deal, "Deal cannot be null");
+    public BybitOrderResponse placeOrder(BybitOrderRequest request) {
         try {
 
             String jsonBody = JsonUtils.toJson(request);
@@ -47,6 +38,7 @@ public class BybitOrderService {
             throw new RuntimeException("Ошибка при выполнении ордера в placeOrder() ", e);
         }
     }
+
     public boolean setLeverage(Deal deal) {
         String leverage = String.valueOf(deal.getLeverageUsed());
         Map<String, String> params = Map.of(
@@ -69,118 +61,6 @@ public class BybitOrderService {
 
         return true;
     }
-
-//тут надо разобраться!!!
-    public void placePartialTakeProfits(
-            Deal deal,
-            MessageSender messageSender,
-            long chatId,
-            StringBuilder result,
-            BybitMarketService bybitMarketService
-    ) throws Exception {
-
-        List<Double> originalTakeProfits = deal.getTakeProfits();
-        if (originalTakeProfits == null || originalTakeProfits.isEmpty()) {
-            result.append("TP не задан\n");
-            LoggerUtils.logDebug("placePartialTakeProfits() TP не задан");
-            return;
-        }
-
-        double totalSize = deal.getPositionSize();
-        String symbol = deal.getSymbol().toString();
-        double minQty = bybitMarketService.getMinOrderQty(symbol);
-
-        // Если сделка слишком мала — установить только 1 ближайший TP
-        if (bybitMarketService.getMinOrderQty(deal.getSymbol().toString()) == deal.getPositionSize()) {
-            double tpPrice = originalTakeProfits.get(0);
-            double qty = bybitMarketService.roundLotSize(symbol, totalSize);
-
-            if (qty < minQty) {
-                messageSender.send(chatId, String.format(EmojiUtils.CROSS + " Даже один TP невозможно установить: qty %.3f < minQty %.3f", qty, minQty));
-                return;
-            }
-
-            BybitOrderRequest tpRequest = new BybitOrderRequest();
-            tpRequest.setSymbol(symbol);
-            tpRequest.setSide(deal.getDirection() == Direction.LONG ? "Sell" : "Buy");
-            tpRequest.setOrderType("Limit");
-            tpRequest.setQty(String.format("%.3f", qty));
-            tpRequest.setPrice(String.valueOf(tpPrice));
-            tpRequest.setReduceOnly(true);
-            tpRequest.setTimeInForce("GTC");
-
-            String json = JsonUtils.toJson(tpRequest);
-            BybitOrderResponse response = bybitHttpClient.signedPost("/v5/order/create", json, BybitOrderResponse.class);
-
-            if (!"OK".equalsIgnoreCase(response.getRetMsg())) {
-                throw new IllegalStateException(String.format("Ошибка установки TP: %.2f, qty: %.3f, причина: %s", tpPrice, qty, response.getRetMsg()));
-            }
-
-            messageSender.send(chatId, String.format(EmojiUtils.OKAY + " Установлен единственный TP %.2f (qty %.3f)", tpPrice, qty));
-            result.append(EmojiUtils.OKAY).append("TP (min qty)\n");
-            return;
-        }
-
-        // Иначе — отфильтруем доступные TP
-        List<Double> validTakeProfits = new ArrayList<>();
-        for (Double tp : originalTakeProfits) {
-            double approxQty = totalSize / originalTakeProfits.size();
-            double roundedQty = bybitMarketService.roundLotSize(symbol, approxQty);
-            if (roundedQty >= minQty) {
-                validTakeProfits.add(tp);
-            }
-        }
-
-        if (validTakeProfits.isEmpty()) {
-            messageSender.send(chatId, EmojiUtils.CROSS + " Ни один TP не может быть установлен: позиция слишком мала.");
-            return;
-        }
-
-        // Новый план по допустимым TP
-        PartialExitPlanner planner = new PartialExitPlanner();
-        PartialExitPlan plan = planner.planExit(validTakeProfits);
-
-        if (plan == null) {
-            throw new IllegalStateException("Exit plan is null после фильтрации TP");
-        }
-
-        StringBuilder tpSummary = new StringBuilder();
-        for (PartialExitPlan.ExitStep step : plan.getPartialExits()) {
-            double tpPrice = step.getTakeProfit();
-            int percentage = step.getPercentage();
-            double qty = totalSize * percentage / 100.0;
-            double roundedQty = bybitMarketService.roundLotSize(symbol, qty);
-
-            if (roundedQty < minQty) {
-                tpSummary.append(String.format(EmojiUtils.CROSS + " TP %.2f — qty %.3f < minQty %.3f, пропущен\n", tpPrice, roundedQty, minQty));
-                continue;
-            }
-
-            BybitOrderRequest tpRequest = new BybitOrderRequest();
-            tpRequest.setSymbol(symbol);
-            tpRequest.setSide(deal.getDirection() == Direction.LONG ? "Sell" : "Buy");
-            tpRequest.setOrderType("Limit");
-            tpRequest.setQty(String.format("%.3f", roundedQty));
-            tpRequest.setPrice(String.valueOf(tpPrice));
-            tpRequest.setReduceOnly(true);
-            tpRequest.setTimeInForce("GTC");
-
-            String json = JsonUtils.toJson(tpRequest);
-            BybitOrderResponse response = bybitHttpClient.signedPost("/v5/order/create", json, BybitOrderResponse.class);
-
-            if (!"OK".equalsIgnoreCase(response.getRetMsg())) {
-                throw new IllegalStateException(String.format(EmojiUtils.CROSS + "Ошибка установки TP:\n %.2f (%d%%), qty: %.3f, причина: %s",
-                        tpPrice, percentage, roundedQty, response.getRetMsg()));
-            }
-
-            tpSummary.append(String.format(EmojiUtils.OKAY + " TP %.2f (%d%% pos, qty %.3f)\n", tpPrice, percentage, roundedQty));
-        }
-
-        result.append(EmojiUtils.OKAY).append("TP\n");
-        messageSender.send(chatId, tpSummary.toString());
-    }
-
-
 
     public BybitOrderResponse setStopLoss(Deal deal) {
         try {

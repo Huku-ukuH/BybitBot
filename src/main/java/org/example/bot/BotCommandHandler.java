@@ -6,17 +6,21 @@ import org.example.ai.AiService;
 import org.example.bybit.dto.BybitOrderRequest;
 import org.example.bybit.dto.BybitOrderResponse;
 import org.example.bybit.service.*;
-import org.example.deal.*;
+import org.example.deal.ActiveDealStore;
+import org.example.deal.Deal;
+import org.example.deal.DealCalculator;
+import org.example.deal.DealValidator;
 import org.example.deal.dto.DealRequest;
 import org.example.deal.dto.DealValidationResult;
-import org.example.deal.dto.PartialExitPlan;
 import org.example.model.Direction;
 import org.example.model.EntryType;
 import org.example.monitor.dto.PositionInfo;
-import org.example.strategy.params.PartialExitPlanner;
+import org.example.strategy.params.ExitPlan;
+import org.example.strategy.params.ExitPlanManager;
+import org.example.strategy.strategies.StrategyFactory;
 import org.example.util.EmojiUtils;
 import org.example.util.LoggerUtils;
-import org.example.strategy.strategies.StrategyFactory;
+
 import java.util.Arrays;
 import java.util.List;
 
@@ -27,12 +31,12 @@ public class BotCommandHandler {
     BybitPositionTrackerService bybitPositionTrackerService;
     private final BybitAccountService bybitAccountService;
     private final BybitMonitorService bybitMonitorService;
-    private final PartialExitPlanner partialExitPlanner;
     private final BybitMarketService bybitMarketService;
     private final BybitOrderService bybitOrderService;
     private final ActiveDealStore activeDealStore;
     private final DealCalculator dealCalculator;
-    private String defaultStrategyName = "ai";
+    private String strategyName = "ai";
+    private ExitPlanManager exitPlanManager;
     private boolean waitingSignal = false;
     private MessageSender messageSender;
     private final AiService aiService;
@@ -50,7 +54,7 @@ public class BotCommandHandler {
             BybitMonitorService bybitMonitorService,
             BybitMarketService bybitMarketService, BybitPositionTrackerService bybitPositionTrackerService) {
         dealCalculator = new DealCalculator(bybitAccountService, bybitMarketService);
-        partialExitPlanner = new PartialExitPlanner();
+        exitPlanManager = new ExitPlanManager(dealCalculator, bybitOrderService, messageSender);
         this.bybitPositionTrackerService = bybitPositionTrackerService;
         this.aiService = aiService;
         this.bybitAccountService = bybitAccountService;
@@ -59,6 +63,7 @@ public class BotCommandHandler {
         this.bybitMarketService = bybitMarketService;
         this.bybitMonitorService = bybitMonitorService;
     }
+
     public void handleCommand(long chatId, String command, String messageText) {
         switch (command.toLowerCase()) {
             case "/start", "/help" -> sendHelpMessage(chatId);
@@ -66,17 +71,18 @@ public class BotCommandHandler {
             case "/check" -> handleCheck(chatId);
             case "/amount" -> handleAmount(chatId);
             case "/go" -> handleGo(chatId);
-            case "/tpadd" -> handleTpAdd(chatId);
             case "/list" -> handleList(chatId);
             case "/write" -> handleWrite(chatId, messageText);
             case "/orders" -> handleOrders(chatId);
             case "/calculate" -> handleCalculate(chatId);
+            case "/lossupdate" -> updateLossPrecent(chatId);
             case "/exit" -> handleExit(chatId);
             case "/update" -> handleUpdate(chatId);
             case "/setstrat" -> handleSetStrategy(chatId, messageText);
             default -> messageSender.send(chatId, EmojiUtils.INFO + " Неизвестная команда: " + command);
         }
     }
+
     private void sendHelpMessage(long chatId) {
         String helpText = EmojiUtils.PAPER + """
                  Доступные команды:
@@ -95,6 +101,7 @@ public class BotCommandHandler {
                 """; // <-- Обновлённый текст помощи
         messageSender.send(chatId, helpText);
     }
+
     private void cycleBreak() {
         if (currentDealId != null) {
             activeDealStore.removeDeal(currentDealId);
@@ -102,6 +109,7 @@ public class BotCommandHandler {
         currentDealId = null;
         deal = null;
     }
+
     private void handleGetSignal(long chatId, String messageText) {
         if (!waitingSignal) {
             waitingSignal = true;
@@ -113,7 +121,7 @@ public class BotCommandHandler {
             deal = new Deal(aiService.parseSignal(messageText));
             deal.setChatId(chatId);
             currentDealId = deal.getId();
-            deal.setStrategyName(this.defaultStrategyName);
+            deal.setStrategyName(this.strategyName);
             messageSender.send(chatId, deal.toString());
             waitingSignal = false;
         } catch (Exception e) {
@@ -122,6 +130,7 @@ public class BotCommandHandler {
             waitingSignal = false;
         }
     }
+
     private void handleCheck(long chatId) {
         if (deal == null) {
             messageSender.sendWarn(chatId, "Проверять нечего, Deal is null", "handleCheck()");
@@ -140,6 +149,7 @@ public class BotCommandHandler {
             messageSender.sendError(chatId, "Ошибка проверки сделки", e, "handleCheck()");
         }
     }
+
     private void handleAmount(long chatId) {
         if (deal == null) {
             messageSender.sendWarn(chatId, "Проверять нечего, Deal is null", "handleAmount()");
@@ -155,6 +165,7 @@ public class BotCommandHandler {
             messageSender.sendError(chatId, "Ошибка расчёта позиции", e, "handleAmount()");
         }
     }
+
     private void handleGo(long chatId) {
         if (deal == null) {
             messageSender.sendWarn(chatId, "Сделки нет! ", "handleGo()");
@@ -170,7 +181,7 @@ public class BotCommandHandler {
 
             // 2. Выставляем ордер на вход (маркет или лимит)
             BybitOrderRequest request = new BybitOrderRequest(deal);
-            BybitOrderResponse orderResponse = bybitOrderService.placeOrder(request, deal);
+            BybitOrderResponse orderResponse = bybitOrderService.placeOrder(request);
 
             if (orderResponse.isSuccess()) {
                 result.append(EmojiUtils.OKAY + " Order\n");
@@ -182,11 +193,11 @@ public class BotCommandHandler {
 
                 // Если это МАРКЕТ-ордер — позиция уже открыта → активируем сразу
                 if (deal.getEntryType() == EntryType.MARKET) {
-                    goIfDealOpen(chatId, deal, orderResponse);
+                    goIfDealOpen(chatId, deal);
                 }
                 // Если это ЛИМИТ — ждём исполнения, активация будет позже
                 else {
-                    messageSender.send(chatId," Лимитный ордер выставлен. Ожидаем вход...");
+                    messageSender.send(chatId, " Лимитный ордер выставлен. Ожидаем вход...");
                 }
             } else {
                 messageSender.sendWarn(chatId, "❌ Ошибка при создании ордера: " + orderResponse.getRetMsg(), "handleGo()");
@@ -195,55 +206,25 @@ public class BotCommandHandler {
             messageSender.sendError(chatId, "Ошибка при создании сделки: " + e.getMessage(), e, "handleGo()");
         }
     }
-    public void goIfDealOpen(long chatId, Deal deal, BybitOrderResponse orderResponse) {
-        StringBuilder result = new StringBuilder();
 
+    public void goIfDealOpen(long chatId, Deal deal) {
         try {
-            // Обновляем сделку: цена входа, статус, время
-            double entryPrice = extractEntryPrice(orderResponse); // из ответа
-            deal.setEntryPrice(entryPrice);
             deal.setActive(true);
-
-            // Теперь можно ставить SL и TP
             if (deal.getStopLoss() != null) {
-                BybitOrderResponse slResponse = bybitOrderService.setStopLoss(deal);
-                if (slResponse.isSuccess()) {
-                    result.append("SL:").append(deal.getStopLoss()).append("\n");
-                } else {
-                    result.append(EmojiUtils.CROSS + " SL не установлен: ").append(slResponse.getRetMsg()).append("\n");
-                }
+                bybitOrderService.setStopLoss(deal);
             }
-// УСТАРЕВШИЙ МЕТОД placePartialTakeProfits, новый подход это центр управления выходами из позиции
-            bybitOrderService.placePartialTakeProfits(deal, messageSender, chatId, result, bybitMarketService);
+            ExitPlan plan = (ExitPlan) deal.getStrategy().planExit(deal);
+            exitPlanManager.executeExitPlan(deal, plan, chatId);
 
-            // Уведомляем пользователя
-            messageSender.send(chatId, EmojiUtils.OKAY + " Позиция открыта! Установлены SL и TP.\n" + result);
+            // Сохраняем сделку
+            activeDealStore.addDeal(deal);
 
         } catch (Exception e) {
-            messageSender.sendError(chatId, "Ошибка при активации сделки после входа", e, "onEntryExecuted");
+            messageSender.sendError(chatId, "Ошибка при активации сделки", e, "goIfDealOpen()");
         }
     }
 
-    //Начинать отсюда!!
-    private void handleTpAdd(long chatId) {
-        Deal deal = getActiveDeal(chatId);
-        if (deal == null) return;
-        try {
-            PartialExitPlan plan = partialExitPlanner.planExit(deal.getTakeProfits());
-            if (plan == null || plan.getPartialExits().isEmpty()) {
-                messageSender.sendWarn(chatId, "Не удалось составить план частичного выхода.", "handleTpAdd()");
-                return;
-            }
-            StringBuilder sb = new StringBuilder("План частичного выхода:\n");
-            for (var step : plan.getPartialExits()) {
-                sb.append("- TP: ").append(step.getTakeProfit())
-                        .append(", Процент: ").append(step.getPercentage()).append("%\n");
-            }
-            messageSender.send(chatId, sb.toString());
-        } catch (Exception e) {
-            messageSender.sendError(chatId, "Ошибка при планировании частичного выхода:", e, "handleTpAdd()");
-        }
-    }
+
 
     private void handleList(long chatId) {
         List<Deal> deals = activeDealStore.getAllDeals();
@@ -337,9 +318,15 @@ public class BotCommandHandler {
         }
 
         // Сохраняем стратегию по умолчанию
-        this.defaultStrategyName = strategyNameInput.toLowerCase(); // Приводим к нижнему регистру для единообразия
-        messageSender.send(chatId, EmojiUtils.OKAY + " Стратегия по умолчанию для новых сделок установлена на: " + this.defaultStrategyName);
-        LoggerUtils.logInfo("Стратегия по умолчанию изменена пользователем на " + this.defaultStrategyName);
+        this.strategyName = strategyNameInput.toLowerCase(); // Приводим к нижнему регистру для единообразия
+        messageSender.send(chatId, EmojiUtils.OKAY + " Стратегия по умолчанию для новых сделок установлена на: " + this.strategyName);
+        LoggerUtils.logInfo("Стратегия по умолчанию изменена пользователем на " + this.strategyName);
     }
     // ------------------
+    private  void updateLossPrecent(long chatId) {
+        double updateLoss = StrategyFactory.getStrategy(strategyName).lossUpdate(bybitAccountService);
+        String message = "Предел риска обновлен на " +  updateLoss + "$ на позицию";
+        messageSender.send(chatId, message);
+        LoggerUtils.logInfo(message);
+    }
 }

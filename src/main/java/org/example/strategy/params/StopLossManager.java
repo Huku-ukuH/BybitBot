@@ -1,11 +1,9 @@
-// org.example.monitor.StopLossManager.java (переработанный)
-package org.example.monitor;
+package org.example.strategy.params;
 
 import org.example.deal.Deal;
 import org.example.model.Direction;
-import org.example.util.MathUtils;
 import org.example.util.LoggerUtils;
-
+import org.example.util.MathUtils;
 /**
  * Универсальный менеджер Stop Loss.
  * Предоставляет методы для расчета и обновления SL,

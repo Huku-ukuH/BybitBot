@@ -17,7 +17,7 @@ import java.util.HashMap;
 public class StrategyConfig {
 
     private double defaultSlPercent;
-    private double maxLossInPosition;
+    private double maxLossPrecentInPosition;
     private int[] leverageTrails;
     private double warningDistancePercent;
     private Map<Integer, int[]> tpExitRules;
@@ -26,7 +26,7 @@ public class StrategyConfig {
 
     public StrategyConfig() {
         this.defaultSlPercent = ValuesUtil.getDefaultSlPercent();
-        this.maxLossInPosition = ValuesUtil.getDefaultMaxLossInPosition();
+        this.maxLossPrecentInPosition = ValuesUtil.getDefaultLossPrecent();
         this.leverageTrails = Arrays.copyOf(ValuesUtil.getDefaultLeverageTrails(), ValuesUtil.getDefaultLeverageTrails().length);
         this.warningDistancePercent = ValuesUtil.getWarningDistancePercent();
         this.tpExitRules = ValuesUtil.getDefaultTpExitRules();
@@ -39,7 +39,7 @@ public class StrategyConfig {
                           Map<Double, Integer> customPnlTpExitRules) {
 
         this.defaultSlPercent = customSlPercent != null ? customSlPercent : ValuesUtil.getDefaultSlPercent();
-        this.maxLossInPosition = customMaxLossInPosition != null ? customMaxLossInPosition : ValuesUtil.getDefaultMaxLossInPosition();
+        this.maxLossPrecentInPosition = customMaxLossInPosition != null ? customMaxLossInPosition : ValuesUtil.getDefaultLossPrecent();
         this.warningDistancePercent = customWarningDistancePercent != null ? customWarningDistancePercent : ValuesUtil.getWarningDistancePercent();
         this.leverageTrails = customLeverageTrails != null ?
                 Arrays.copyOf(customLeverageTrails, customLeverageTrails.length) :
@@ -74,7 +74,7 @@ public class StrategyConfig {
     public String toString() {
         return "StrategyConfig{" +
                 "defaultSlPercent=" + defaultSlPercent +
-                ", maxLossInPosition=" + maxLossInPosition +
+                ", maxLossInPosition=" + maxLossPrecentInPosition +
                 ", leverageTrails=" + Arrays.toString(leverageTrails) +
                 ", warningDistancePercent=" + warningDistancePercent +
                 ", exitRules=" + tpExitRules +
