@@ -5,6 +5,11 @@ import lombok.Getter;
 
 //Класс редставляет торговый символ, например: "BTCUSDT", "ETHUSDT" и т.д.
 public class Symbol {
+    @Override
+    public String toString() {
+        return symbol;
+    }
+
     private final String symbol;
 
     @JsonCreator
@@ -16,11 +21,6 @@ public class Symbol {
             symbol = symbol + "USDT";
         }
         this.symbol = symbol.toUpperCase();
-    }
-
-    @Override
-    public String toString() {
-        return symbol;
     }
 
     @Override

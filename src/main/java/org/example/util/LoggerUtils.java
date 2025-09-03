@@ -12,7 +12,7 @@ public class LoggerUtils {
         }
 
         public static void logInfo(String message) {
-            getLogger(getCallerClass()).info("\n" + message + "\n");
+            getLogger(getCallerClass()).info("\n" + EmojiUtils.ZOOM + message + "\n");
         }
 
         public static void logDebug(String message) {

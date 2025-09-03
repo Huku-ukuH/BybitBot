@@ -41,7 +41,6 @@ public class BybitAccountService {
                 .mapToDouble(Double::parseDouble)
                 .findFirst()
                 .orElseThrow(() -> new RuntimeException("Поле totalAvailableBalance не найдено"));
-
         return lastUsdtBalanceInfo;
     }
 

@@ -12,7 +12,7 @@ public class BybitOrderResponse {
     @JsonProperty("retMsg")
     private String retMsg;
     @JsonProperty("result")
-    private OrderResult result;
+    private OrderResult orderResult;
     @JsonProperty("retExtInfo")
     private Object retExtInfo; // Можно сделать отдельный класс, если потребуется
     @JsonProperty("time")
@@ -35,7 +35,7 @@ public class BybitOrderResponse {
         return "BybitOrderResponse{" +
                 "retCode=" + retCode +
                 ", retMsg='" + retMsg + '\'' +
-                ", orderId='" + (result != null ? result.orderId : "null") + '\'' +
+                ", orderId='" + (orderResult != null ? orderResult.orderId : "null") + '\'' +
                 '}';
     }
 }

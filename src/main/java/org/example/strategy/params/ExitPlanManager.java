@@ -1,33 +1,34 @@
 package org.example.strategy.params;
 
 import org.example.bot.MessageSender;
+import org.example.bybit.dto.BalanceResponse;
 import org.example.bybit.dto.BybitOrderRequest;
+import org.example.bybit.dto.BybitOrderResponse;
 import org.example.bybit.service.BybitOrderService;
 import org.example.deal.Deal;
 import org.example.deal.DealCalculator;
+import org.example.deal.OrderManager;
+import org.example.model.Direction;
+import org.example.util.MathUtils;
 
 public class ExitPlanManager {
 
     private final DealCalculator dealCalculator;
     private final BybitOrderService bybitOrderService;
-    private final MessageSender messageSender;
 
     public ExitPlanManager(
             DealCalculator dealCalculator,
-            BybitOrderService bybitOrderService,
-            MessageSender messageSender) {
+            BybitOrderService bybitOrderService) {
         this.dealCalculator = dealCalculator;
         this.bybitOrderService = bybitOrderService;
-        this.messageSender = messageSender;
     }
 
     /**
      * исполняет план
      */
-    public void executeExitPlan(Deal deal, ExitPlan plan, long chatId) {
+    public String executeExitPlan(Deal deal, ExitPlan plan) {
         if (plan == null || plan.getSteps().isEmpty()) {
-            messageSender.send(chatId, "Нет плана выхода для выполнения.");
-            return;
+            return "Нет плана выхода для выполнения.";
         }
 
         StringBuilder sb = new StringBuilder("Результат установки TP: ");
@@ -37,20 +38,43 @@ public class ExitPlanManager {
             double qty = dealCalculator.calculateExitQty(deal, percentage);
 
             if (qty == 0.0) {
-                sb.append("❌ TP ").append(String.format("%.2f", tpPrice))
+                sb.append("\n❌ TP ").append(String.format("%.2f", tpPrice))
                         .append(": объём < minQty — пропущен ");
                 continue;
             }
 
             try {
-                bybitOrderService.placeOrder(new BybitOrderRequest(deal, tpPrice, qty));
-                sb.append("✅ TP ").append(String.format("%.2f", tpPrice))
-                        .append(" (").append(percentage).append("%, qty ").append(String.format("%.3f", qty)).append(") ");
+                BybitOrderResponse orderResponse = bybitOrderService.placeOrder(
+                        BybitOrderRequest.forTakeProfit(deal, tpPrice, qty)
+                );
+
+                deal.addOrderId(new OrderManager(orderResponse.getOrderResult().getOrderId(), OrderManager.OrderType.TP, tpPrice));
+
+                double entryPrice = deal.getEntryPrice();
+                double leverage = deal.getLeverageUsed();
+
+                // Расчёт базового PnL в %
+                double basePnlPercent = (deal.getDirection() == Direction.LONG
+                        ? (tpPrice - entryPrice)
+                        : (entryPrice - tpPrice)) / entryPrice * 100;
+
+                // С учётом плеча
+                double leveragedPnl = basePnlPercent * leverage;
+
+                sb.append("\n✅ TP ")
+                        .append(MathUtils.formatPrice(entryPrice, tpPrice))
+                        .append(" (+")
+                        .append(String.format("%.1f", leveragedPnl)) // Один знак после запятой
+                        .append("%)")
+                        .append(" (").append(percentage).append("%, qty ")
+                        .append(MathUtils.formatPrice(deal.getPositionSize(), qty)).append(") ");
+
             } catch (Exception e) {
-                sb.append("❌ Ошибка TP ").append(String.format("%.2f", tpPrice))
+                sb.append("❌ Ошибка TP ")
+                        .append(MathUtils.formatPrice(deal.getEntryPrice(), tpPrice))
                         .append(": ").append(e.getMessage()).append(" ");
             }
         }
-        messageSender.send(chatId, sb.toString());
+        return sb.toString();
     }
 }

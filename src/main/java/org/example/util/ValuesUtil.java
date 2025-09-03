@@ -16,7 +16,7 @@ public class  ValuesUtil {
     private static final double warningDistancePercent = 30.0;
     @Getter
     //процент отступа для стоп лосса по умолчанию
-    private static final double defaultSlPercent = 0.20;
+    private static final double defaultSlPercent = 0.20; // 20%
     @Getter
     //порядок проверки плечей для позиции
     private static final int[] defaultLeverageTrails = {20, 15, 10, 7};

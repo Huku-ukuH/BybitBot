@@ -4,6 +4,7 @@ import org.example.bybit.service.BybitAccountService;
 import org.example.bybit.service.BybitMarketService;
 import org.example.model.Direction;
 import org.example.util.LoggerUtils;
+import org.example.util.MathUtils;
 import org.example.util.ValidationUtils;
 import org.example.strategy.config.StrategyConfig; // <-- НОВЫЙ ИМПОРТ
 import org.example.strategy.strategies.TradingStrategy;   // <-- НОВЫЙ ИМПОРТ
@@ -20,6 +21,7 @@ public class DealCalculator {
     }
 
     public String calculate(Deal deal) {
+        LoggerUtils.logDebug("DealCalculator calculate - Начался рассчет " + deal.getSymbol());
         ValidationUtils.checkNotNull(deal, "Deal cannot be null");
         StrategyConfig strategyConfig;
         try {
@@ -29,7 +31,6 @@ public class DealCalculator {
             }
             strategyConfig = strategy.getConfig();
             if (strategyConfig == null) {
-                LoggerUtils.logWarn("Конфиг стратегии равен null для сделки " + deal.getId() + ". Используются значения по умолчанию.");
                 strategyConfig = new StrategyConfig(); // если конфиг null создать умолчание
             }
         } catch (Exception e) {
@@ -37,116 +38,110 @@ public class DealCalculator {
             strategyConfig = new StrategyConfig();
         }
 
-        // 1. Entry price
-        double entryPrice = deal.getEntryPrice() != null && deal.getEntryPrice() > 0
-                ? deal.getEntryPrice()
-                : bybitMarketService.getLastPrice(deal.getSymbol().toString());
-        deal.setEntryPrice(entryPrice);
-        LoggerUtils.logInfo("Текущая цена " + deal.getSymbol() + " = " + entryPrice);
-
-        // 2. Stop Loss - теперь используем параметр из strategyConfig
+        // 1. Stop Loss - используем параметр из strategyConfig
         double stopLoss = deal.getStopLoss() != null && deal.getStopLoss() > 0
                 ? deal.getStopLoss()
                 : getDefaultStopLoss(deal, strategyConfig);
         deal.setStopLoss(stopLoss);
         LoggerUtils.logInfo("SL " + deal.getSymbol() + " = " + stopLoss);
 
-        // 3. Position size (и проверка minQty внутри)
-        double positionSize = calculatePositionSize(deal, strategyConfig, bybitMarketService); // <-- Передаем deal, config и сервис
+
+        // 2. Position size (и проверка minQty внутри)
+        double actualBalance = fetchBalance();
+        double positionSize = calculatePositionSize(deal, strategyConfig, bybitMarketService, actualBalance); // <-- Передаем deal, config и сервис
         deal.setPositionSize(positionSize);
-        LoggerUtils.logInfo("размер позиции " + deal.getSymbol() + " = " + positionSize);
 
-
-        // 4. Leverage - теперь используем параметр из strategyConfig
-        int leverageUsed = findValidLeverage(deal, strategyConfig); // <-- Передаем deal, config и сервис
+        // 3. Leverage - теперь используем параметр из strategyConfig
+        int leverageUsed = findValidLeverage(deal, strategyConfig, actualBalance); // <-- Передаем deal, config и сервис
         deal.setLeverageUsed(leverageUsed);
-        LoggerUtils.logInfo("\n" + getClass().getName() + ".findValidLeverage: leverageUsed = " + leverageUsed);
 
-        // 5. Required capital
+        // 4. Required capital
         double requiredCapital = calculateRequiredCapital(deal);
         deal.setRequiredCapital(requiredCapital);
 
-        // 6. Проверка баланса
-        double actualBalance = fetchBalance();
+        // 5. Проверка баланса
         if (requiredCapital > actualBalance) {
             throw new IllegalStateException("\nНедостаточно средств. Нужно: " + requiredCapital + ", доступно: " + actualBalance);
         }
 
-        return String.format(
-                "Размер позиции: %.2f\nСтоп-лосс: %.5f\nПлечо: %dx\nНеобходимый капитал: %.2f USDT",
-                positionSize, deal.getStopLoss(), leverageUsed, requiredCapital
-        );
+        LoggerUtils.logDebug("DealCalculator calculate - Закончился рассчет " + deal.getSymbol());
+        return "Размер позиции: " + MathUtils.formatPrice(0.01, positionSize) + "\n" +
+                "SL: " + MathUtils.formatPrice(deal.getEntryPrice(), deal.getStopLoss()) + "\n" +
+                "LV: " + leverageUsed + "x\n" +
+                "Необходимый капитал: " + MathUtils.formatPrice(0.01, requiredCapital) + " USDT\n" +
+                "Баланс аккаунта: " + MathUtils.formatPrice(0.01, actualBalance) + " USDT";
     }
-
-
-    // Методы теперь принимают deal и strategyConfig как параметры
 
 
     private double getDefaultStopLoss(Deal deal, StrategyConfig strategyConfig) {
-        // Получаем процент отклонения SL из конфига
-        double slPercent = strategyConfig.getDefaultSlPercent(); // 0.10 для 0.10%
-
+        double entryPrice = deal.getEntryPrice();
+        double slPercent = strategyConfig.getDefaultSlPercent(); // например, 0.20 → 20%
+        LoggerUtils.logDebug("getDefaultStopLoss Расчёт дефолтного SL:");
+        double stopLoss;
         if (deal.getDirection() == Direction.LONG) {
-            // SL = EntryPrice * (1 - slPercent / 100)
-            return deal.getEntryPrice() * (1 - slPercent / 100.0);
-        } else { // SHORT
-            // SL = EntryPrice * (1 + slPercent / 100)
-            return deal.getEntryPrice() * (1 + slPercent / 100.0);
+            stopLoss = entryPrice * (1 - slPercent);
+        } else {
+            stopLoss = entryPrice * (1 + slPercent);
         }
+        return stopLoss;
     }
 
     // Используем параметр из strategyConfig
-    private double calculatePositionSize(Deal deal, StrategyConfig strategyConfig, BybitMarketService bybitMarketService) {
+    private double calculatePositionSize(Deal deal, StrategyConfig strategyConfig, BybitMarketService bybitMarketService, double balance) {
+        LoggerUtils.logDebug("calculatePositionSize 🧮 Начало расчёта размера позиции");
+
         double delta = Math.abs(deal.getEntryPrice() - deal.getStopLoss());
         if (delta == 0) {
-            throw new IllegalArgumentException("\nSL == entryPrice (деление на ноль!)");
+            LoggerUtils.logInfo("❌❌❌❌❌ SL совпадает с ценой входа — деление на ноль!❌❌❌❌❌");
+            throw new IllegalArgumentException("SL == entryPrice (деление на ноль!)");
         }
 
-        // Теперь получаем максимальный убыток из переданного конфига
-        double maxLoss = strategyConfig.getMaxLossPrecentInPosition();
-        double rawPositionSize = maxLoss / delta; // Используем maxLoss из конфига
+        double maxLossPercent = strategyConfig.getMaxLossPrecen(); // например, 1.0 → 1%
+        double maxLossUSD = balance * (maxLossPercent / 100.0);
+        double rawPositionSize = maxLossUSD / delta;
         double potentialLoss = rawPositionSize * delta;
 
-        if (potentialLoss > maxLoss) {
-            LoggerUtils.logInfo(getClass().getName() + ": potentialLoss(" + potentialLoss + ") > maxLossInPosition(" + maxLoss + "), применяем сокращение.");
-            rawPositionSize = maxLoss / delta;
+        // Коррекция, если потенциальный убыток превышает лимит
+        if (potentialLoss > maxLossUSD) {
+            rawPositionSize = maxLossUSD / delta;
+            LoggerUtils.logInfo("potentialLoss > maxLossUSD \nКоррекция rawPositionSize = " + rawPositionSize);
         }
 
-        LoggerUtils.logInfo(getClass().getName() + ": rawPositionSize = " + rawPositionSize + ", potentialLoss = " + (rawPositionSize * delta));
-
+        // Округление по шагу лота
         double minQty = bybitMarketService.getMinOrderQty(deal.getSymbol().toString());
         double roundedSize = bybitMarketService.roundLotSize(deal.getSymbol().toString(), rawPositionSize);
 
+        // Проверка minQty
         if (roundedSize < minQty) {
-            LoggerUtils.logWarn("Округлённый объём меньше minQty. Устанавливаем позицию = minQty.");
+            LoggerUtils.logWarn("устанавливаем = minQty в размер позиции");
             roundedSize = minQty;
         }
 
+        LoggerUtils.logInfo("📊 РАСЧЁТ РАЗМЕРА ПОЗИЦИИ (итог)" +
+                "\nМакс. риск: " + maxLossPercent +
+                "%\nРазмер позиции: " + roundedSize +
+                "\nПотенциальный убыток: " + potentialLoss + " USDT");
+        // =============================================
         return roundedSize;
     }
 
     // Используем параметр из strategyConfig
-    private int findValidLeverage(Deal deal, StrategyConfig strategyConfig) {
+    private int findValidLeverage(Deal deal, StrategyConfig strategyConfig, double balance) {
 
         int[] leverageOptions = strategyConfig.getLeverageTrails();
         for (int leverage : leverageOptions) {
-            if (isLeverageAcceptable(deal.getEntryPrice(), deal.getPositionSize(), leverage)) {
+            if (isLeverageAcceptable(deal.getEntryPrice(), deal.getPositionSize(), leverage, balance)) {
                 return leverage;
             }
         }
         return 3;
     }
 
-    // Этот метод тоже адаптируем, передавая сервисы, если нужно
-    // (В данном случае сервисы не используются внутри, но передаются для единообразия или если логика усложнится)
-    private boolean isLeverageAcceptable(Double entryPrice, double positionSize, int leverage) {
 
+    private boolean isLeverageAcceptable(Double entryPrice, double positionSize, int leverage, double balance) {
         double requiredCapital = (positionSize * entryPrice) / leverage;
-        if (requiredCapital <= 0) {
-            LoggerUtils.logInfo("\n" + getClass().getName() + ".isLeverageAcceptable: requiredCapital = " + requiredCapital);
-            return false;
-        }
-        return true;
+        // Требуемый капитал должен быть <= 50% от баланса (или другого лимита)
+        return requiredCapital > 0 && requiredCapital <= balance * 0.5;
     }
 
     private double calculateRequiredCapital(Deal deal) {

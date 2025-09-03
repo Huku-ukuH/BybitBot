@@ -37,13 +37,8 @@ public class TradingBotApplication {
             BybitOrderService bybitOrderService = new BybitOrderService(bybitHttpClient);
             BybitMarketService bybitMarketService = new BybitMarketService(bybitHttpClient);
             BybitPositionTrackerService bybitPositionTrackerService = new BybitPositionTrackerService(bybitHttpClient);
-
-
             BybitMonitorService bybitMonitorService = new BybitMonitorService();  //пока не используется
-
             ActiveDealStore activeDealStore = new ActiveDealStore();
-
-
 
             BotCommandHandler commandHandler = new BotCommandHandler(
                     aiService, accountService, activeDealStore,
@@ -52,7 +47,6 @@ public class TradingBotApplication {
             TradingBot tradingBot = new TradingBot(commandHandler);
             MessageSender messageSender = new MessageSender(tradingBot);
             commandHandler.setMessageSender(messageSender);
-
             StopLossManager stopLossManager = new StopLossManager();
 
             PriceMonitor priceMonitor = new PriceMonitor(

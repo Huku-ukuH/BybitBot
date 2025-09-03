@@ -8,6 +8,7 @@ import org.example.strategy.params.ExitPlan;
 import org.example.model.Direction;
 import org.example.strategy.config.StrategyConfig;
 import org.example.strategy.dto.StrategyContext;
+import org.example.util.EmojiUtils;
 import org.example.util.LoggerUtils;
 import org.example.strategy.params.PartialExitPlanner;
 import org.example.util.ValuesUtil;
@@ -43,37 +44,49 @@ public class BasedStrategy implements TradingStrategy {
 
     @Override
     public ExitPlan planExit(Deal deal) {
-        if (deal == null) {
-            LoggerUtils.logWarn("BasedStrategy: Сделка null.");
+        try {
+            LoggerUtils.logInfo("🔍 BasedStrategy.planExit(): Начало для сделки " + deal.getId());
+
+            StrategyConfig config = this.getConfig();
+            double entryPrice = deal.getEntryPrice();
+            Direction direction = deal.getDirection();
+
+            // 1. Попытка по TP
+            if (deal.getTakeProfits() != null && !deal.getTakeProfits().isEmpty()) {
+                List<ExitPlan.ExitStep> steps = new PartialExitPlanner()
+                        .planExit(deal.getTakeProfits(), config.getTpExitRules());
+                if (!steps.isEmpty()) {
+                    return new ExitPlan(steps, ExitPlan.ExitType.TP);
+                }
+            }
+
+            // 2. Попытка по PnL
+            Map<Double, Integer> pnlRules = config.getPnlTpExitRules();
+            if (pnlRules != null && !pnlRules.isEmpty()) {
+                LoggerUtils.logInfo("📈 PnL-правила: " + pnlRules);
+                LoggerUtils.logInfo("➤ Вызываю ExitPlan.fromPnl() для создания плана по PnL");
+
+                // 🔥 Здесь происходит NoSuchMethodError
+                ExitPlan plan = ExitPlan.fromPnl(pnlRules, entryPrice, direction);
+
+                if (plan != null && !plan.getSteps().isEmpty()) {
+                    LoggerUtils.logInfo("✅ План по PnL создан");
+                    return plan;
+                }
+            }
+
+            LoggerUtils.logWarn("⚠️ Не удалось создать план выхода");
+            return null;
+
+        } catch (Error err) {
+            // ✅ Ловим NoSuchMethodError
+            LoggerUtils.logError("🔴 FATAL: Ошибка выполнения (возможно, метод не найден)", err);
+            return null;
+        } catch (Exception e) {
+            LoggerUtils.logError("Ошибка в planExit()", e);
+            e.printStackTrace();
             return null;
         }
-
-        StrategyConfig config = this.getConfig();
-
-        // 1. Сначала пробуем создать план по TP
-        if (deal.getTakeProfits() != null && !deal.getTakeProfits().isEmpty()) {
-            List<ExitPlan.ExitStep> steps = new PartialExitPlanner()
-                    .planExit(deal.getTakeProfits(), config.getTpExitRules());
-
-            if (!steps.isEmpty()) {
-                LoggerUtils.logInfo("BasedStrategy: План выхода по TP создан с " + steps.size() + " шагами.");
-                return new ExitPlan(steps, ExitPlan.ExitType.TP);
-            }
-        }
-
-        // 2. Если TP нет или не удалось создать — пробуем PnL
-        Map<Double, Integer> pnlRules = config.getPnlTpExitRules();
-        if (pnlRules != null && !pnlRules.isEmpty()) {
-            ExitPlan plan = ExitPlan.fromPnl(pnlRules, deal.getEntryPrice());
-            if (!plan.getSteps().isEmpty()) {
-                LoggerUtils.logInfo("BasedStrategy: План выхода по PnL создан.");
-                return plan;
-            }
-        }
-
-        // 3. Ничего не подошло
-        LoggerUtils.logWarn("BasedStrategy: Не удалось создать план выхода — нет TP и нет PnL-правил.");
-        return null;
     }
 
     @Override

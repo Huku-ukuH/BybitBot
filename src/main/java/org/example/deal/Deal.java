@@ -11,6 +11,7 @@ import org.example.strategy.params.ExitPlan;
 import org.example.strategy.strategies.StrategyFactory;
 import org.example.strategy.strategies.TradingStrategy;
 import org.example.util.LoggerUtils;
+import org.example.util.MathUtils;
 
 import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -20,21 +21,22 @@ import java.util.concurrent.atomic.AtomicInteger;
 public class Deal {
     // === Основные поля сделки ===
     private String id;  // Уникальный ID сделки
-    private Symbol symbol;
-    private Direction direction;
-    private EntryType entryType;
-    private Double entryPrice;
-    private Double stopLoss;
-    private Double potentialLoss;
-    private List<Double> takeProfits;
-    private double positionSize;
-    private double leverageUsed;
-    private double requiredCapital;
     private String note;
     private long chatId;
+    private Symbol symbol;
+    private Double stopLoss;
+    private ExitPlan exitPlan;
+    private Double entryPrice;
+    private Direction direction;
+    private double positionSize;
+    private double leverageUsed;
+    private EntryType entryType;
+    private Double potentialLoss;
+    private double requiredCapital;
+    private List<Double> takeProfits;
     private PositionInfo positionInfo;
-    private ExitPlan exitPlan; // План выхода (TP, PnL, Trailing)
-    private List<String> executedTpOrderIds = new ArrayList<>(); // Для трейлинга
+    private List <OrderManager> ordersIdList;
+    private List<String> executedTpOrderIds = new ArrayList<>(); // Для трейлинга (пока просто переменная)
 
 
     private String strategyName = "ai";
@@ -57,6 +59,7 @@ public class Deal {
         this.positionSize = 0.0;
         this.leverageUsed = 1;
         this.requiredCapital = 0.0;
+        this.ordersIdList = new ArrayList<>();
     }
 
     public Deal(DealRequest request) {
@@ -84,7 +87,6 @@ public class Deal {
         if (strategy == null && strategyName != null && !strategyName.isEmpty()) {
             try {
                 this.strategy = StrategyFactory.getStrategy(this.strategyName);
-                LoggerUtils.logDebug("Экземпляр стратегии '" + this.strategyName + "' успешно создан для сделки " + this.id);
 
             } catch (Exception e) { // Перехватываем общее исключение на случай проблем в фабрике
                 LoggerUtils.logError("Не удалось загрузить стратегию '" + strategyName + "' для сделки " + this.id + ". Попытка отката к 'ai'.", e);
@@ -192,24 +194,34 @@ public class Deal {
 
     @Override
     public String toString() {
-        return "🟢 Сделка " + symbol + " — " + direction.toString().toLowerCase() + "\n\n" +
-                entryType + "\n" +
-                (entryType == EntryType.LIMIT ?
-                        "💸 Цена входа: ~" + entryPrice :
-                        "💰 Текущая цена: " + entryPrice) + "\n" +
+        return "🟢\\\"" + strategyName + "\uD83E\uDDE0\\\" " + symbol + "—" + direction.toString().toLowerCase() + entryType + "\n" +
+                "💸 Цена входа: ~" + entryPrice +
                 "🛑 SL: " + stopLoss + "\n" +
-                "✅ TP: " + takeProfits + "\n" +
-                "🧠 Стратегия: " + strategyName + "\n"; // Добавляем информацию о стратегии
+                "✅ TP: " + takeProfits + "\n";
+    }
+
+    public String bigDealToString() {
+        return id + "\n" + this + "QTY: " + positionSize + "\n" + "Риск: " + potentialLoss + "$\n";
     }
 
     public StringBuilder positiveDeal() {
-        StringBuilder sb = new StringBuilder(symbol.toString() + "\n");
+        StringBuilder sb = new StringBuilder(symbol + "\n");
         sb.append(isPositivePNL()? "🛑" : "✅ БУ");
         sb.append(positionInfo.toString());
         return sb;
     }
 
+    public void addOrderId(OrderManager order) {
+        this.ordersIdList.add(order);
+    }
 
+    public List<OrderManager> getOrdersIdList() {
+        return Collections.unmodifiableList(ordersIdList);
+    }
+
+    public void clearOrdersIdList() {
+        this.ordersIdList.clear();
+    }
     // === Вспомогательные классы ===
 
     @Getter

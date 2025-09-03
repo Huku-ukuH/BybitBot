@@ -6,10 +6,7 @@ import org.example.ai.AiService;
 import org.example.bybit.dto.BybitOrderRequest;
 import org.example.bybit.dto.BybitOrderResponse;
 import org.example.bybit.service.*;
-import org.example.deal.ActiveDealStore;
-import org.example.deal.Deal;
-import org.example.deal.DealCalculator;
-import org.example.deal.DealValidator;
+import org.example.deal.*;
 import org.example.deal.dto.DealRequest;
 import org.example.deal.dto.DealValidationResult;
 import org.example.model.Direction;
@@ -54,7 +51,7 @@ public class BotCommandHandler {
             BybitMonitorService bybitMonitorService,
             BybitMarketService bybitMarketService, BybitPositionTrackerService bybitPositionTrackerService) {
         dealCalculator = new DealCalculator(bybitAccountService, bybitMarketService);
-        exitPlanManager = new ExitPlanManager(dealCalculator, bybitOrderService, messageSender);
+        exitPlanManager = new ExitPlanManager(dealCalculator, bybitOrderService);
         this.bybitPositionTrackerService = bybitPositionTrackerService;
         this.aiService = aiService;
         this.bybitAccountService = bybitAccountService;
@@ -102,9 +99,14 @@ public class BotCommandHandler {
         messageSender.send(chatId, helpText);
     }
 
-    private void cycleBreak() {
+    private void cycleBreak(long chatId) {
+        if (activeDealStore.containsDeal(deal.getId())) {
+           messageSender.send(chatId, bybitOrderService.closeDeal(deal));
+
+        }
         if (currentDealId != null) {
             activeDealStore.removeDeal(currentDealId);
+            LoggerUtils.logInfo("cycleBreak() " + deal + "удалена из activeDealStore");
         }
         currentDealId = null;
         deal = null;
@@ -116,7 +118,18 @@ public class BotCommandHandler {
             messageSender.send(chatId, "Жду сигнал");
             return;
         }
-        messageText = messageText.replace("/getsgnl", "");
+        messageText = messageText.replace("/getsgnl", "").trim();
+        if (messageText.isEmpty()) {
+            messageSender.sendWarn(chatId, "Сигнал пустой. Отмена.", "handleGetSignal()");
+            waitingSignal = false;
+            return;
+        }
+        if (messageText.startsWith("/")) {
+            messageSender.sendWarn(chatId, "Нельзя отправлять команду как сигнал. Отмена.", "handleGetSignal()");
+            LoggerUtils.logWarn("Попытка использовать команду как сигнал: " + messageText);
+            waitingSignal = false;
+            return;
+        }
         try {
             deal = new Deal(aiService.parseSignal(messageText));
             deal.setChatId(chatId);
@@ -126,7 +139,7 @@ public class BotCommandHandler {
             waitingSignal = false;
         } catch (Exception e) {
             messageSender.sendError(chatId, "Ошибка обработки сигнала", e, "handleGetSignal()\nОтвет нейронки: " + aiService.parseSignal(messageText));
-            cycleBreak();
+            cycleBreak(chatId);
             waitingSignal = false;
         }
     }
@@ -134,14 +147,14 @@ public class BotCommandHandler {
     private void handleCheck(long chatId) {
         if (deal == null) {
             messageSender.sendWarn(chatId, "Проверять нечего, Deal is null", "handleCheck()");
-            cycleBreak();
+            cycleBreak(chatId);
             return;
         }
         try {
             DealValidationResult result = new DealValidator().validate(deal, bybitMarketService);
             if (!result.getErrors().isEmpty()) {
                 messageSender.send(chatId, result.formatErrors().toString());
-                cycleBreak();
+                cycleBreak(chatId);
                 return;
             }
             messageSender.send(chatId, result.formatWarnings().toString());
@@ -157,10 +170,7 @@ public class BotCommandHandler {
         }
         try {
             messageSender.send(chatId, dealCalculator.calculate(deal) + "\n" + EmojiUtils.OKAY + "значения добавлены в Deal");
-            // удаление текущей цены из переменной
-            if (deal.getEntryType() == EntryType.MARKET) {
-                deal.setEntryPrice(null);
-            }
+
         } catch (Exception e) {
             messageSender.sendError(chatId, "Ошибка расчёта позиции", e, "handleAmount()");
         }
@@ -180,13 +190,14 @@ public class BotCommandHandler {
             }
 
             // 2. Выставляем ордер на вход (маркет или лимит)
-            BybitOrderRequest request = new BybitOrderRequest(deal);
+            BybitOrderRequest request = BybitOrderRequest.forEntry(deal);
             BybitOrderResponse orderResponse = bybitOrderService.placeOrder(request);
-
             if (orderResponse.isSuccess()) {
                 result.append(EmojiUtils.OKAY + " Order\n");
-                deal.setId(orderResponse.getResult().getOrderId());
+                deal.setId(orderResponse.getOrderResult().getOrderId());
+
                 currentDealId = deal.getId();
+
 
                 // Сохраняем сделку ДО активации
                 activeDealStore.addDeal(deal);
@@ -208,20 +219,20 @@ public class BotCommandHandler {
     }
 
     public void goIfDealOpen(long chatId, Deal deal) {
+        String result;
         try {
-            deal.setActive(true);
-            if (deal.getStopLoss() != null) {
-                bybitOrderService.setStopLoss(deal);
-            }
-            ExitPlan plan = (ExitPlan) deal.getStrategy().planExit(deal);
-            exitPlanManager.executeExitPlan(deal, plan, chatId);
-
-            // Сохраняем сделку
+             deal.setActive(true);
+            ExitPlan plan = deal.getStrategy().planExit(deal);
+            result = exitPlanManager.executeExitPlan(deal, plan);
             activeDealStore.addDeal(deal);
 
         } catch (Exception e) {
+            LoggerUtils.logError("Ошибка при активации сделки", e);
             messageSender.sendError(chatId, "Ошибка при активации сделки", e, "goIfDealOpen()");
+            cycleBreak(chatId);
+            return;
         }
+        messageSender.send(chatId, EmojiUtils.OKAY + "Сделка открыта!\n" + deal.bigDealToString() + "\n" + result);
     }
 
 
@@ -259,7 +270,7 @@ public class BotCommandHandler {
 
     private void handleExit(long chatId) {
         messageSender.send(chatId, "Cделка обнулена.");
-        cycleBreak();
+        cycleBreak(chatId);
     }
 
     private void handleUpdate(long chatId) {

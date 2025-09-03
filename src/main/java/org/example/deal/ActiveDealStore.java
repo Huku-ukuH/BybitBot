@@ -60,6 +60,7 @@ public class ActiveDealStore {
      * Удаляет сделку по ID
      */
     public boolean removeDeal(String id) {
+
         return activeDeals.remove(id) != null;
     }
 

@@ -13,6 +13,7 @@ import org.example.util.LoggerUtils;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.Collections;
@@ -38,7 +39,7 @@ public class PriceMonitor {
     public void subscribe(Deal deal) {
         String symbol = deal.getSymbol().getSymbol();
         symbolSubscribers
-                .computeIfAbsent(symbol, k -> Collections.synchronizedList(new ArrayList<>()))
+                .computeIfAbsent(symbol, k -> new CopyOnWriteArrayList<>())
                 .add(deal);
         webSocketClient.subscribeToTicker(deal.getSymbol());
     }
