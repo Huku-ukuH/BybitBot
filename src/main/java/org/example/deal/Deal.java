@@ -8,10 +8,10 @@ import org.example.model.EntryType;
 import org.example.deal.dto.DealRequest;
 import org.example.monitor.dto.PositionInfo;
 import org.example.strategy.params.ExitPlan;
-import org.example.strategy.strategies.StrategyFactory;
-import org.example.strategy.strategies.TradingStrategy;
+import org.example.strategy.strategies.strategies.AbstractStrategy;
+import org.example.strategy.strategies.strategies.StrategyFactory;
+import org.example.strategy.strategies.strategies.TradingStrategy;
 import org.example.util.LoggerUtils;
-import org.example.util.MathUtils;
 
 
 import java.util.*;
@@ -41,7 +41,7 @@ public class Deal {
 
 
     private String strategyName = "ai";
-    private transient TradingStrategy strategy;
+    private AbstractStrategy strategy;
 
     private boolean active = true;
     private boolean positivePnL = false;
@@ -85,7 +85,7 @@ public class Deal {
         LoggerUtils.logDebug("Стратегия для сделки " + this.id + " установлена на: " + this.strategyName);
     }
     //Получает экземпляр стратегии, связанной с этой сделкой.
-    public TradingStrategy getStrategy() {
+    public AbstractStrategy getStrategy() {
         if (strategy == null && strategyName != null && !strategyName.isEmpty()) {
             try {
                 this.strategy = StrategyFactory.getStrategy(this.strategyName);

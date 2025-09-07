@@ -13,13 +13,13 @@ public class  ValuesUtil {
     private static final double defaultLossPrecent = 1;
     @Getter
     //процент для предупреждения о слишком дальнем тейке или стопе
-    private static final double warningDistancePercent = 30.0;
+    private static final double warningDistancePercent = 17;
     @Getter
     //процент отступа для стоп лосса по умолчанию
-    private static final double defaultSlPercent = 0.20; // 20%
+    private static final double defaultSlPercent = 0.15; // 20%
     @Getter
     //порядок проверки плечей для позиции
-    private static final int[] defaultLeverageTrails = {20, 15, 10, 7};
+    private static final int[] defaultLeverageTrails = {7, 10, 20};
     //правила выхода - количество тейков - %позиции на тейк
     private static final Map<Integer, int[]> DEFAULT_TP_EXIT_RULES = new HashMap<>();
 

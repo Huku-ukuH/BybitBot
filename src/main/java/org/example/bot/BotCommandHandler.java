@@ -4,17 +4,13 @@ import lombok.Getter;
 import lombok.Setter;
 import org.example.ai.AiService;
 import org.example.bybit.BybitManager;
-import org.example.bybit.dto.BybitOrderRequest;
-import org.example.bybit.dto.BybitOrderResponse;
 import org.example.deal.*;
 import org.example.deal.dto.DealRequest;
 import org.example.deal.dto.DealValidationResult;
 import org.example.model.Direction;
 import org.example.model.EntryType;
 import org.example.monitor.dto.PositionInfo;
-import org.example.strategy.params.ExitPlan;
-import org.example.strategy.params.ExitPlanManager;
-import org.example.strategy.strategies.StrategyFactory;
+import org.example.strategy.strategies.strategies.StrategyFactory;
 import org.example.util.EmojiUtils;
 import org.example.util.LoggerUtils;
 
@@ -117,9 +113,18 @@ public class BotCommandHandler {
             messageSender.send(chatId, deal.toString());
             waitingSignal = false;
         } catch (Exception e) {
-            messageSender.sendError(chatId, "Ошибка обработки сигнала", e, "handleGetSignal()");
-            cycleBreak(chatId);
-            waitingSignal = false;
+
+            try {
+                messageSender.sendError(chatId, "Ошибка обработки сигнала, пробуем снова", e, "handleGetSignal()");
+                deal = StrategyFactory.getStrategy(strategyName).createDeal(aiService, messageText, chatId, strategyName);
+                currentDealId = deal.getId();
+                messageSender.send(chatId, deal.toString());
+                waitingSignal = false;
+            } catch (Exception a) {
+                messageSender.sendError(chatId, "Не помогло :(", e, "handleGetSignal()");
+                cycleBreak(chatId);
+                waitingSignal = false;
+            }
         }
     }
     private void handleCheck(long chatId) {
@@ -161,75 +166,48 @@ public class BotCommandHandler {
         }
     }
 
+
+
+
     private void handleGo(long chatId) {
         if (deal == null) {
-            messageSender.sendWarn(chatId, "Сделки нет! ", "handleGo()");
+            messageSender.sendWarn(chatId, "Сделки нет!", "handleGo()");
             return;
         }
 
-        StringBuilder result = new StringBuilder();
         try {
-            // 1. Устанавливаем плечо (можно делать до входа)
-            if (bybitManager.getBybitOrderService().setLeverage(deal)) {
-                result.append(EmojiUtils.OKAY + " Leverage\n");
-            }
-
-            // 2. Выставляем ордер на вход (маркет или лимит)
-            BybitOrderRequest request = BybitOrderRequest.forEntry(deal);
-            BybitOrderResponse orderResponse = bybitManager.getBybitOrderService().placeOrder(request);
-            if (orderResponse.isSuccess()) {
-                result.append(EmojiUtils.OKAY + " Order\n");
-                deal.setId(orderResponse.getOrderResult().getOrderId());
+            if (deal.getStrategy().openDeal(bybitManager.getBybitOrderService(), deal)) {
                 currentDealId = deal.getId();
-                // Сохраняем сделку ДО активации
                 activeDealStore.addDeal(deal);
 
-                // Если это МАРКЕТ-ордер — позиция уже открыта → активируем сразу
                 if (deal.getEntryType() == EntryType.MARKET) {
-                    goIfDealOpen(chatId, deal);
-                }
-                // Если это ЛИМИТ — ждём исполнения, активация будет позже
-                else {
-                    messageSender.send(chatId, " Лимитный ордер выставлен. Ожидаем вход...");
+                    String result;
+                    try {
+                        result = deal.getStrategy().goIfDealOpen(deal, bybitManager);
+                    } catch (Exception e) {
+                        messageSender.sendError(chatId, "Ошибка при активации сделки", e, "handleGo()");
+                        cycleBreak(chatId);
+                        return;
+                    }
+
+                    messageSender.send(
+                            chatId,
+                            EmojiUtils.OKAY + " Сделка открыта!\n" +
+                                    deal.bigDealToString() + "\n" +
+                                    result
+                    );
+                } else {
+                    messageSender.send(chatId, "🕒 Лимитный ордер выставлен. Ожидаем вход...");
                 }
             } else {
-                messageSender.sendWarn(chatId, "❌ Ошибка при создании ордера: " + orderResponse.getRetMsg(), "handleGo()");
+                messageSender.sendWarn(chatId, "❌ Ордер не был размещён.", "handleGo()");
+                cycleBreak(chatId);
             }
         } catch (Exception e) {
-            messageSender.sendError(chatId, "Ошибка при создании сделки: " + e.getMessage(), e, "handleGo()");
-        }
-    }
-
-    public void goIfDealOpen(long chatId, Deal deal) {
-
-        String result = "null";
-        try {
-            deal.setActive(true);
-            ExitPlan plan = deal.getStrategy().planExit(deal);
-            result = new ExitPlanManager(new DealCalculator(bybitManager.getBybitAccountService(), bybitManager.getBybitMarketService()), bybitManager.getBybitOrderService()).executeExitPlan(deal, plan);
-        } catch (Exception e) {
-            LoggerUtils.logError("Ошибка при планировании выхода (TP)", e);
-            messageSender.sendError(chatId, "Ошибка при установке тейк-профитов", e, "goIfDealOpen()");
-        }
-
-        // 🔥 Попытка установить стоп-лосс
-        try {
-            BybitOrderResponse stopLossResponse = bybitManager.getBybitOrderService().setStopLoss(deal);
-            if (!stopLossResponse.isSuccess()) {
-                throw new IllegalStateException("Bybit вернул успех, но не установил SL");
-            }
-            LoggerUtils.logInfo("✅ Стоп-лосс установлен для " + deal.getSymbol() + ": " + deal.getStopLoss());
-        } catch (Exception e) {
-            LoggerUtils.logError("❌ Не удалось установить стоп-лосс для " + deal.getSymbol(), e);
-            messageSender.sendWarn(chatId, EmojiUtils.CROSS + " КРИТИЧКО: Не удалось установить стоп-лосс! Сделка отменена.", "goIfDealOpen()->BybitOrderService().setStopLoss(deal)");
+            messageSender.sendError(chatId, "❌ Ошибка при открытии сделки", e, "handleGo()");
             cycleBreak(chatId);
-            return;
         }
-
-        activeDealStore.addDeal(deal);
-        messageSender.send(chatId, EmojiUtils.OKAY + "Сделка открыта!\n" + deal.bigDealToString() + "\n" + result);
     }
-
 
 
 
@@ -269,6 +247,8 @@ public class BotCommandHandler {
         cycleBreak(chatId);
     }
 
+
+    // TODO: продолжать отсюда
     //метод обновления, а точнее метод восстановления сделок после перезагрузки бота,
     // но пока это просто метод для обновления информации о сделках
     private void handleUpdate(long chatId) {
@@ -286,7 +266,7 @@ public class BotCommandHandler {
                     activeDealStore.removeDeal(deal.getId());
                 } else {
                     // Обновляем состояние
-                    deal.updateDealFromBybitPosition(pos); // реализуйте этот метод
+                    deal.updateDealFromBybitPosition(pos);
                 }
             } catch (Exception e) {
                 LoggerUtils.logError("Ошибка обновления позиции для " + deal.getSymbol(), e);

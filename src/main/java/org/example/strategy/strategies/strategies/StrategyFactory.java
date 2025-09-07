@@ -1,4 +1,4 @@
-package org.example.strategy.strategies;
+package org.example.strategy.strategies.strategies;
 import org.example.util.LoggerUtils;
 import java.util.ArrayList;
 import java.util.List;
@@ -11,7 +11,7 @@ public class StrategyFactory {
 
 
     //Получает экземпляр стратегии по её имени.
-    public static TradingStrategy getStrategy(String name) throws IllegalArgumentException {
+    public static AbstractStrategy getStrategy(String name) throws IllegalArgumentException {
         if (name == null || name.isEmpty()) {
             throw new IllegalArgumentException("Имя стратегии не может быть null или пустым.");
         }

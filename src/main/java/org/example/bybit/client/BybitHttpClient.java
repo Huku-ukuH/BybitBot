@@ -93,7 +93,7 @@ public class BybitHttpClient {
     public <T> T get(String endpoint, Map<String, String> queryParams, Class<T> responseType) {
         try {
             String query = buildQueryString(queryParams);
-            String url = authConfig.getBaseUrl() + endpoint + (query.isEmpty() ? "" : "?" + query);
+            String url = authConfig.getBYBIT_API_BASE_URL() + endpoint + (query.isEmpty() ? "" : "?" + query);
 
             LoggerUtils.logDebug("GET → endpoint: " + endpoint + ", queryParams: " + queryParams);
 
@@ -132,7 +132,7 @@ public class BybitHttpClient {
      */
     public <T> T post(String endpoint, String jsonBody, Class<T> responseType) {
         try {
-            String url = authConfig.getBaseUrl() + endpoint;
+            String url = authConfig.getBYBIT_API_BASE_URL() + endpoint;
 
             LoggerUtils.logDebug("POST → endpoint: " + endpoint + ", body: " + jsonBody);
 
@@ -170,14 +170,14 @@ public class BybitHttpClient {
             long timestamp = getTimestamp();
             String recvWindow = "10000"; // Можно сделать настраиваемым через конфиг
 
-            String signaturePayload = timestamp + authConfig.getApiKey() + recvWindow + jsonBody;
-            String signature = BybitRequestUtils.generateSignature(authConfig.getApiSecret(), signaturePayload);
+            String signaturePayload = timestamp + authConfig.getBYBIT_API_KEY() + recvWindow + jsonBody;
+            String signature = BybitRequestUtils.generateSignature(authConfig.getBYBIT_API_SECRET(), signaturePayload);
 
             LoggerUtils.logDebug("SIGNED POST → endpoint: " + endpoint + ", body: " + jsonBody);
 
             HttpRequest request = HttpRequest.newBuilder()
-                    .uri(URI.create(authConfig.getBaseUrl() + endpoint))
-                    .header("X-BAPI-API-KEY", authConfig.getApiKey())
+                    .uri(URI.create(authConfig.getBYBIT_API_BASE_URL() + endpoint))
+                    .header("X-BAPI-API-KEY", authConfig.getBYBIT_API_KEY())
                     .header("X-BAPI-SIGN", signature)
                     .header("X-BAPI-TIMESTAMP", String.valueOf(timestamp))
                     .header("X-BAPI-RECV-WINDOW", recvWindow)
@@ -210,12 +210,12 @@ public class BybitHttpClient {
             String query = buildQueryString(queryParams);
             String queryWithPrefix = query.isEmpty() ? "" : "?" + query;
             long timestamp = getTimestamp();
-            String signaturePayload = timestamp + authConfig.getApiKey() + recvWindow + query;
-            String signature = BybitRequestUtils.generateSignature(authConfig.getApiSecret(), signaturePayload);
+            String signaturePayload = timestamp + authConfig.getBYBIT_API_KEY() + recvWindow + query;
+            String signature = BybitRequestUtils.generateSignature(authConfig.getBYBIT_API_SECRET(), signaturePayload);
 
             HttpRequest request = HttpRequest.newBuilder()
-                    .uri(URI.create(authConfig.getBaseUrl() + endpoint + queryWithPrefix))
-                    .header("X-BAPI-API-KEY", authConfig.getApiKey())
+                    .uri(URI.create(authConfig.getBYBIT_API_BASE_URL() + endpoint + queryWithPrefix))
+                    .header("X-BAPI-API-KEY", authConfig.getBYBIT_API_KEY())
                     .header("X-BAPI-SIGN", signature)
                     .header("X-BAPI-TIMESTAMP", String.valueOf(timestamp))
                     .header("X-BAPI-RECV-WINDOW", recvWindow)
@@ -251,7 +251,7 @@ public class BybitHttpClient {
      */
     private void syncServerTime() throws IOException, InterruptedException {
         HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create(authConfig.getBaseUrl() + "/v5/market/time"))
+                .uri(URI.create(authConfig.getBYBIT_API_BASE_URL() + "/v5/market/time"))
                 .timeout(java.time.Duration.ofSeconds(10))
                 .GET()
                 .build();
@@ -369,7 +369,7 @@ public class BybitHttpClient {
      * @param requestBuilder Строитель HTTP-запроса.
      */
     private void addApiKeyHeader(HttpRequest.Builder requestBuilder) {
-        String apiKey = authConfig.getApiKey();
+        String apiKey = authConfig.getBYBIT_API_KEY();
         if (apiKey != null && !apiKey.isEmpty()) {
             requestBuilder.header("X-BAPI-API-KEY", apiKey);
         } else {

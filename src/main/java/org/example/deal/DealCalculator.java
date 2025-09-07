@@ -7,7 +7,7 @@ import org.example.util.LoggerUtils;
 import org.example.util.MathUtils;
 import org.example.util.ValidationUtils;
 import org.example.strategy.config.StrategyConfig; // <-- НОВЫЙ ИМПОРТ
-import org.example.strategy.strategies.TradingStrategy;   // <-- НОВЫЙ ИМПОРТ
+import org.example.strategy.strategies.strategies.TradingStrategy;   // <-- НОВЫЙ ИМПОРТ
 
 public class DealCalculator {
 

@@ -1,4 +1,4 @@
-package org.example.strategy.strategies;
+package org.example.strategy.strategies.strategies;
 
 /**
  * Исключение, выбрасываемое стратегиями при ошибках выполнения.

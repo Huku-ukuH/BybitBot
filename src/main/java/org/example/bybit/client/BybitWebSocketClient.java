@@ -3,6 +3,7 @@ package org.example.bybit.client;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.github.cdimascio.dotenv.Dotenv;
 import org.example.model.Symbol;
 import org.example.monitor.dto.PriceUpdate;
 import org.example.util.LoggerUtils;
@@ -18,8 +19,7 @@ import java.util.function.Consumer;
 
 
 public class BybitWebSocketClient {
-    private static final String WEBSOCKET_URI_TESTNET = "wss://stream-testnet.bybit.com/v5/public/linear";
-    private static final String WEBSOCKET_URI_WAR = "wss://stream.bybit.com/v5/public/linear";
+    private static final String WEBSOCKET_URI = Dotenv.load().get("WEBSOCKET_URI");
 
     // Теперь принимает PriceUpdate, а не String
     private final Consumer<PriceUpdate> messageHandler;
@@ -39,7 +39,7 @@ public class BybitWebSocketClient {
     }
     private void connectAsync() {
         try {
-            client = new WebSocketClient(new URI(WEBSOCKET_URI_TESTNET)) {
+            client = new WebSocketClient(new URI(WEBSOCKET_URI)) {
                 @Override
                 public void onOpen(ServerHandshake handshake) {
                     LoggerUtils.logInfo("✅ Подключение к WebSocket Bybit установлено");

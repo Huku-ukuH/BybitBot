@@ -13,8 +13,8 @@ import java.util.Map;
 
 public class BybitMarketService {
     private final BybitHttpClient httpClient;
-    private String accountCategorySpot = "spot";
-    private String accountCategoryLinear = "linear";
+
+    private final String ACCOUNT_CATEGORY = "linear"; //"spot"
     private final Map<String, InstrumentInfoResponse.Instrument> instrumentInfoCache = new HashMap<>();
 
     public BybitMarketService(BybitHttpClient httpClient) {
@@ -24,7 +24,7 @@ public class BybitMarketService {
     public double getLastPrice(String symbol) {
         String endpoint = "/v5/market/tickers";
         Map<String, String> params = Map.of(
-                "category", accountCategoryLinear,
+                "category", ACCOUNT_CATEGORY,
                 "symbol", symbol
         );
 
@@ -114,7 +114,7 @@ public class BybitMarketService {
         LoggerUtils.logDebug("Информация об инструменте " + symbol + " отсутствует в кэше. Запрос к API Bybit.");
         String endpoint = "/v5/market/instruments-info";
         Map<String, String> params = Map.of(
-                "category", accountCategoryLinear,
+                "category", ACCOUNT_CATEGORY,
                 "symbol", symbol
         );
 

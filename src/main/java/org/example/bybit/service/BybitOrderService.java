@@ -39,7 +39,7 @@ public class BybitOrderService {
         }
     }
 
-    public boolean setLeverage(Deal deal) {
+    public void setLeverage(Deal deal) {
         String leverage = String.valueOf(deal.getLeverageUsed());
         Map<String, String> params = Map.of(
                 "category", "linear",
@@ -57,7 +57,6 @@ public class BybitOrderService {
         }
 
 
-        return true;
     }
 
     public BybitOrderResponse setStopLoss(Deal deal) {
@@ -86,7 +85,7 @@ public class BybitOrderService {
         }
     }
 
-    public String cancelOrder(Deal deal, String orderId) {
+    public void cancelOrder(Deal deal, String orderId) {
         try {
             Map<String, String> body = new HashMap<>();
             body.put("orderId", orderId);
@@ -99,7 +98,6 @@ public class BybitOrderService {
         } catch (Exception e) {
             LoggerUtils.logError("Ошибка отмены ордера: ", e);
         }
-        return "Ордер " + deal.getSymbol().toString() + " " + orderId + "отменен.";
     }
     public String closeDeal(Deal deal) {
         if (deal == null) {

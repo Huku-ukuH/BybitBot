@@ -5,14 +5,14 @@ import lombok.Getter;
 @Getter
 public class BybitAuthConfig {
 
-    private final String apiKey;
-    private final String apiSecret;
-    private final String baseUrl;
+    private final String BYBIT_API_KEY;
+    private final String BYBIT_API_SECRET;
+    private final String BYBIT_API_BASE_URL;
 
     public BybitAuthConfig() {
         Dotenv dotenv = Dotenv.load();
-        this.apiKey = dotenv.get("BYBIT_API_KEY");
-        this.apiSecret = dotenv.get("BYBIT_API_SECRET");
-        this.baseUrl = "https://api-testnet.bybit.com";
+        this.BYBIT_API_KEY = dotenv.get("BYBIT_API_KEY");
+        this.BYBIT_API_SECRET = dotenv.get("BYBIT_API_SECRET");
+        this.BYBIT_API_BASE_URL = dotenv.get("BYBIT_API_BASE_URL");
     }
 }

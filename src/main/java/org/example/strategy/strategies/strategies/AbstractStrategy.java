@@ -1,19 +1,26 @@
-
-package org.example.strategy.strategies;
+package org.example.strategy.strategies.strategies;
 
 import org.example.ai.AiService;
+import org.example.bot.MessageSender;
+import org.example.bybit.BybitManager;
+import org.example.bybit.dto.BybitOrderRequest;
+import org.example.bybit.dto.BybitOrderResponse;
 import org.example.bybit.dto.TickerResponse;
 import org.example.bybit.service.BybitAccountService;
 import org.example.bybit.service.BybitMarketService;
+import org.example.bybit.service.BybitOrderService;
+import org.example.deal.ActiveDealStore;
 import org.example.deal.Deal;
 import org.example.deal.DealCalculator;
 import org.example.deal.DealValidator;
 import org.example.deal.dto.DealRequest;
 import org.example.deal.dto.DealValidationResult;
+import org.example.model.EntryType;
 import org.example.strategy.params.ExitPlan;
 import org.example.model.Direction;
 import org.example.strategy.config.StrategyConfig;
 import org.example.strategy.dto.StrategyContext;
+import org.example.strategy.params.ExitPlanManager;
 import org.example.util.EmojiUtils;
 import org.example.util.LoggerUtils;
 import org.example.strategy.params.PartialExitPlanner;
@@ -22,32 +29,21 @@ import org.example.util.ValuesUtil;
 import java.util.*;
 
 /**
- * Базовая стратегия, реализующая стандартную логику управления сделкой.
+ * Абстрактная базовая стратегия, реализующая общую логику управления сделкой.
+ * Конкретные стратегии (например, AiStrategy, MartingaleStrategy) должны наследоваться от этого класса
+ * и реализовывать абстрактные методы.
  */
-public class BasedStrategy implements TradingStrategy {
-    private StrategyConfig config;
+public abstract class AbstractStrategy implements TradingStrategy {
 
-    public BasedStrategy() {
+    protected StrategyConfig config;
+    protected final Set<Double> triggeredPnlLevels = new HashSet<>();
+    public AbstractStrategy() {
         this.config = createConfig();
+        LoggerUtils.logDebug(getClass().getSimpleName() + ": Инициализирована с конфигом: " + config);
     }
     protected StrategyConfig createConfig() {
-        return new StrategyConfig(
-                null,
-                null,
-                new int[]{10, 20, 5},
-                null,
-                null,
-                null
-        );
+        return new StrategyConfig();
     }
-
-    private final Set<Double> triggeredPnlLevels = new HashSet<>();
-
-    @Override
-    public StrategyConfig getConfig() {
-        return this.config;
-    }
-
     @Override
     public Deal createDeal(AiService aiService, String messageText, long chatId, String strategyName) {
         LoggerUtils.logDebug("Создание сделки по сигналу: " + messageText);
@@ -62,22 +58,82 @@ public class BasedStrategy implements TradingStrategy {
             throw e;
         }
     }
-
-    @Override
-    public DealValidationResult validateDeal(Deal deal, BybitMarketService marketService) {
-        return new DealValidator().validate(deal, marketService);
-    }
-
-    @Override
-    public String calculateDeal(Deal deal, DealCalculator dealCalculator) {
-         return dealCalculator.calculate(deal);
+    public DealValidationResult validateDeal(Deal deal, BybitMarketService marketService) { return new DealValidator().validate(deal, marketService); }
+    public String calculateDeal (Deal deal, DealCalculator dealCalculator) {
+        return dealCalculator.calculate(deal);
     }
 
 
-    @Override
+
+    public boolean openDeal(BybitOrderService bybitOrderService, Deal deal) {
+        // Этап 1: Установка плеча
+        try {
+            bybitOrderService.setLeverage(deal);
+        } catch (Exception e) {
+            throw new RuntimeException("❌ Ошибка при установке плеча для символа " + deal.getSymbol(), e);
+        }
+
+        // Этап 2: Выставление ордера
+        try {
+            BybitOrderRequest request = BybitOrderRequest.forEntry(deal);
+            BybitOrderResponse orderResponse = bybitOrderService.placeOrder(request);
+
+            // Логируем ответ от Bybit, даже если всё ок
+            String retMsg = orderResponse.getRetMsg();
+            String fullMessage = retMsg != null ? retMsg : "No message from Bybit";
+
+            if (orderResponse.isSuccess()) {
+                deal.setId(orderResponse.getOrderResult().getOrderId());
+                return true;
+            } else {
+                LoggerUtils.logWarn("Ордер не размещён для " + deal.getSymbol() + ": " + fullMessage);
+                return false;
+            }
+        } catch (Exception e) {
+            // Ловим исключение до того, как retMsg будет доступен
+            throw new RuntimeException("❌ Ошибка при выставлении ордера для символа " + deal.getSymbol(), e);
+        }
+    }
+    public String goIfDealOpen(Deal deal, BybitManager bybitManager) {
+        // Устанавливаем стоп-лосс
+        try {
+            BybitOrderResponse slResponse = bybitManager.getBybitOrderService().setStopLoss(deal);
+            String retMsg = slResponse.getRetMsg();
+
+            if (!slResponse.isSuccess()) {
+                String message = retMsg != null ? retMsg : "No error message from Bybit";
+                throw new IllegalStateException("❌ Не удалось установить SL: " + message);
+            }
+
+            LoggerUtils.logInfo("✅ Стоп-лосс установлен для " + deal.getSymbol() + ": " + deal.getStopLoss());
+        } catch (Exception e) {
+            throw new RuntimeException("❌ Ошибка при установке SL для символа " + deal.getSymbol(), e);
+        }
+
+        // Устанавливаем TP через ExitPlan
+        try {
+            deal.setActive(true);
+            ExitPlan plan = deal.getStrategy().planExit(deal);
+
+            if (plan == null || plan.getSteps().isEmpty()) {
+                return "⚠️ План выхода не сформирован.";
+            }
+
+            ExitPlanManager exitPlanManager = new ExitPlanManager(
+                    new DealCalculator(bybitManager.getBybitAccountService(), bybitManager.getBybitMarketService()),
+                    bybitManager.getBybitOrderService()
+            );
+
+            return exitPlanManager.executeExitPlan(deal, plan);
+        } catch (Exception e) {
+            LoggerUtils.logError("❌ Ошибка при установке TP для символа " + deal.getSymbol(), e);
+            throw new RuntimeException("❌ Ошибка при установке TP для символа " + deal.getSymbol(), e);
+        }
+    }
+
     public ExitPlan planExit(Deal deal) {
         try {
-            LoggerUtils.logInfo("🔍 BasedStrategy.planExit(): Начало для сделки " + deal.getId());
+            LoggerUtils.logInfo("🔍 " + getClass().getSimpleName() + ": Начало сделки " + deal.getId());
 
             StrategyConfig config = this.getConfig();
             double entryPrice = deal.getEntryPrice();
@@ -120,7 +176,26 @@ public class BasedStrategy implements TradingStrategy {
             return null;
         }
     }
+    public double RiskUpdate(BybitAccountService bybitAccountService) {
+        double updateLoss = bybitAccountService.getUsdtBalance() / 100 * ValuesUtil.getDefaultLossPrecent();
+        this.config = new StrategyConfig(
+                null,
+                updateLoss,
+                new int[]{5, 10, 20},
+                15.0,
+                null,
+                null
+        );
+        return updateLoss;
+    }
 
+
+
+
+    @Override
+    public StrategyConfig getConfig() {
+        return config;
+    }
     @Override
     public void onPriceUpdate(StrategyContext context, TickerResponse price) {
         Deal deal = context.getActiveDeal();
@@ -128,7 +203,7 @@ public class BasedStrategy implements TradingStrategy {
             return;
         }
         if (price.getResult() == null || price.getResult().getList() == null || price.getResult().getList().isEmpty()) {
-            LoggerUtils.logWarn("onPriceUpdate: Получен пустой TickerResponse для сделки " + deal.getId());
+            LoggerUtils.logWarn(getClass().getSimpleName() + " onPriceUpdate: Получен пустой TickerResponse для сделки " + deal.getId());
             return;
         }
 
@@ -184,7 +259,7 @@ public class BasedStrategy implements TradingStrategy {
                     (direction == Direction.SHORT && pnlPercent >= targetPnlLevel);
 
             if (levelReached && !triggeredPnlLevels.contains(targetPnlLevel)) {
-               // deal.addTakeProfit(currentPrice);
+                // deal.addTakeProfit(currentPrice);
                 triggeredPnlLevels.add(targetPnlLevel);
                 LoggerUtils.logInfo("BasedStrategy: Достигнут PnL " + String.format("%.2f", targetPnlLevel) +
                         "%. Установлен TP. Планируется выход " + exitPercentage + "% позиции.");
@@ -196,25 +271,16 @@ public class BasedStrategy implements TradingStrategy {
             }
         }
     }
-
     @Override
     public void onTakeProfitHit(StrategyContext context, double executedPrice) {
-        LoggerUtils.logInfo("BasedStrategy: Сработал TP на уровне " + executedPrice + ".");
-        // Сброс триггера, если нужно повторно реагировать на тот же уровень (обычно не нужно)
-        // triggeredPnlLevels.removeIf(level -> Math.abs(level - ...) < epsilon);
+        LoggerUtils.logInfo(getClass().getSimpleName() + ": Сработал TP на уровне " + executedPrice + ".");
     }
-
     @Override
     public void onStopLossHit(StrategyContext context) {
-        LoggerUtils.logWarn("BasedStrategy: Сработал SL.");
-        // Очищаем отслеживаемые уровни при закрытии сделки
+        LoggerUtils.logWarn(getClass().getSimpleName() + ": Сработал SL.");
         triggeredPnlLevels.clear();
     }
-    @Override
-    public double RiskUpdate(BybitAccountService bybitAccountService) {
-        double updateLoss = bybitAccountService.getUsdtBalance()/100 * ValuesUtil.getDefaultLossPrecent();
-        config = new StrategyConfig(null, updateLoss, new int[]{5, 10, 20}, 15.0, null, null
-        );
-        return updateLoss;
-    }
+
+
+
 }
