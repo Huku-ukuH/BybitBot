@@ -3,9 +3,9 @@ package org.example.bot;
 import lombok.Getter;
 import lombok.Setter;
 import org.example.ai.AiService;
+import org.example.bybit.BybitManager;
 import org.example.bybit.dto.BybitOrderRequest;
 import org.example.bybit.dto.BybitOrderResponse;
-import org.example.bybit.service.*;
 import org.example.deal.*;
 import org.example.deal.dto.DealRequest;
 import org.example.deal.dto.DealValidationResult;
@@ -25,15 +25,9 @@ import java.util.List;
 @Getter
 @Setter
 public class BotCommandHandler {
-    BybitPositionTrackerService bybitPositionTrackerService;
-    private final BybitAccountService bybitAccountService;
-    private final BybitMonitorService bybitMonitorService;
-    private final BybitMarketService bybitMarketService;
-    private final BybitOrderService bybitOrderService;
+    private BybitManager bybitManager;
     private final ActiveDealStore activeDealStore;
-    private final DealCalculator dealCalculator;
     private String strategyName = "ai";
-    private ExitPlanManager exitPlanManager;
     private boolean waitingSignal = false;
     private MessageSender messageSender;
     private final AiService aiService;
@@ -43,24 +37,13 @@ public class BotCommandHandler {
     private Deal deal;
     // -----------------
 
-    public BotCommandHandler(
-            AiService aiService,
-            BybitAccountService bybitAccountService,
-            ActiveDealStore activeDealStore,
-            BybitOrderService bybitOrderService,
-            BybitMonitorService bybitMonitorService,
-            BybitMarketService bybitMarketService, BybitPositionTrackerService bybitPositionTrackerService) {
-        dealCalculator = new DealCalculator(bybitAccountService, bybitMarketService);
-        exitPlanManager = new ExitPlanManager(dealCalculator, bybitOrderService);
-        this.bybitPositionTrackerService = bybitPositionTrackerService;
-        this.aiService = aiService;
-        this.bybitAccountService = bybitAccountService;
+    public BotCommandHandler(BybitManager bybitManager, AiService aiService, ActiveDealStore activeDealStore, MessageSender messageSender) {
+        this.bybitManager = bybitManager;
         this.activeDealStore = activeDealStore;
-        this.bybitOrderService = bybitOrderService;
-        this.bybitMarketService = bybitMarketService;
-        this.bybitMonitorService = bybitMonitorService;
-    }
+        this.messageSender = messageSender;
+        this.aiService = aiService;
 
+    }
     public void handleCommand(long chatId, String command, String messageText) {
         switch (command.toLowerCase()) {
             case "/start", "/help" -> sendHelpMessage(chatId);
@@ -79,7 +62,6 @@ public class BotCommandHandler {
             default -> messageSender.send(chatId, EmojiUtils.INFO + " Неизвестная команда: " + command);
         }
     }
-
     private void sendHelpMessage(long chatId) {
         String helpText = EmojiUtils.PAPER + """
                  Доступные команды:
@@ -98,10 +80,9 @@ public class BotCommandHandler {
                 """; // <-- Обновлённый текст помощи
         messageSender.send(chatId, helpText);
     }
-
     private void cycleBreak(long chatId) {
         if (activeDealStore.containsDeal(deal.getId())) {
-           messageSender.send(chatId, bybitOrderService.closeDeal(deal));
+           messageSender.send(chatId, bybitManager.getBybitOrderService().closeDeal(deal));
 
         }
         if (currentDealId != null) {
@@ -131,19 +112,16 @@ public class BotCommandHandler {
             return;
         }
         try {
-            deal = new Deal(aiService.parseSignal(messageText));
-            deal.setChatId(chatId);
+            deal = StrategyFactory.getStrategy(strategyName).createDeal(aiService, messageText, chatId, strategyName);
             currentDealId = deal.getId();
-            deal.setStrategyName(this.strategyName);
             messageSender.send(chatId, deal.toString());
             waitingSignal = false;
         } catch (Exception e) {
-            messageSender.sendError(chatId, "Ошибка обработки сигнала", e, "handleGetSignal()\nОтвет нейронки: " + aiService.parseSignal(messageText));
+            messageSender.sendError(chatId, "Ошибка обработки сигнала", e, "handleGetSignal()");
             cycleBreak(chatId);
             waitingSignal = false;
         }
     }
-
     private void handleCheck(long chatId) {
         if (deal == null) {
             messageSender.sendWarn(chatId, "Проверять нечего, Deal is null", "handleCheck()");
@@ -151,13 +129,20 @@ public class BotCommandHandler {
             return;
         }
         try {
-            DealValidationResult result = new DealValidator().validate(deal, bybitMarketService);
+            DealValidationResult result = deal.getStrategy().validateDeal(deal, bybitManager.getBybitMarketService());
+
             if (!result.getErrors().isEmpty()) {
                 messageSender.send(chatId, result.formatErrors().toString());
                 cycleBreak(chatId);
                 return;
             }
-            messageSender.send(chatId, result.formatWarnings().toString());
+
+            if (!result.getWarnings().isEmpty()) {
+                messageSender.send(chatId, result.formatWarnings().toString());
+            } else {
+                messageSender.send(chatId, EmojiUtils.OKAY + " Проверка пройдена: всё в порядке");
+            }
+
         } catch (Exception e) {
             messageSender.sendError(chatId, "Ошибка проверки сделки", e, "handleCheck()");
         }
@@ -169,7 +154,7 @@ public class BotCommandHandler {
             return;
         }
         try {
-            messageSender.send(chatId, dealCalculator.calculate(deal) + "\n" + EmojiUtils.OKAY + "значения добавлены в Deal");
+            messageSender.send(chatId,  EmojiUtils.OKAY + "\n" + deal.getStrategy().calculateDeal(deal, new DealCalculator(bybitManager.getBybitAccountService(), bybitManager.getBybitMarketService())));
 
         } catch (Exception e) {
             messageSender.sendError(chatId, "Ошибка расчёта позиции", e, "handleAmount()");
@@ -185,20 +170,17 @@ public class BotCommandHandler {
         StringBuilder result = new StringBuilder();
         try {
             // 1. Устанавливаем плечо (можно делать до входа)
-            if (bybitOrderService.setLeverage(deal)) {
+            if (bybitManager.getBybitOrderService().setLeverage(deal)) {
                 result.append(EmojiUtils.OKAY + " Leverage\n");
             }
 
             // 2. Выставляем ордер на вход (маркет или лимит)
             BybitOrderRequest request = BybitOrderRequest.forEntry(deal);
-            BybitOrderResponse orderResponse = bybitOrderService.placeOrder(request);
+            BybitOrderResponse orderResponse = bybitManager.getBybitOrderService().placeOrder(request);
             if (orderResponse.isSuccess()) {
                 result.append(EmojiUtils.OKAY + " Order\n");
                 deal.setId(orderResponse.getOrderResult().getOrderId());
-
                 currentDealId = deal.getId();
-
-
                 // Сохраняем сделку ДО активации
                 activeDealStore.addDeal(deal);
 
@@ -219,21 +201,35 @@ public class BotCommandHandler {
     }
 
     public void goIfDealOpen(long chatId, Deal deal) {
-        String result;
-        try {
-             deal.setActive(true);
-            ExitPlan plan = deal.getStrategy().planExit(deal);
-            result = exitPlanManager.executeExitPlan(deal, plan);
-            activeDealStore.addDeal(deal);
 
+        String result = "null";
+        try {
+            deal.setActive(true);
+            ExitPlan plan = deal.getStrategy().planExit(deal);
+            result = new ExitPlanManager(new DealCalculator(bybitManager.getBybitAccountService(), bybitManager.getBybitMarketService()), bybitManager.getBybitOrderService()).executeExitPlan(deal, plan);
         } catch (Exception e) {
-            LoggerUtils.logError("Ошибка при активации сделки", e);
-            messageSender.sendError(chatId, "Ошибка при активации сделки", e, "goIfDealOpen()");
+            LoggerUtils.logError("Ошибка при планировании выхода (TP)", e);
+            messageSender.sendError(chatId, "Ошибка при установке тейк-профитов", e, "goIfDealOpen()");
+        }
+
+        // 🔥 Попытка установить стоп-лосс
+        try {
+            BybitOrderResponse stopLossResponse = bybitManager.getBybitOrderService().setStopLoss(deal);
+            if (!stopLossResponse.isSuccess()) {
+                throw new IllegalStateException("Bybit вернул успех, но не установил SL");
+            }
+            LoggerUtils.logInfo("✅ Стоп-лосс установлен для " + deal.getSymbol() + ": " + deal.getStopLoss());
+        } catch (Exception e) {
+            LoggerUtils.logError("❌ Не удалось установить стоп-лосс для " + deal.getSymbol(), e);
+            messageSender.sendWarn(chatId, EmojiUtils.CROSS + " КРИТИЧКО: Не удалось установить стоп-лосс! Сделка отменена.", "goIfDealOpen()->BybitOrderService().setStopLoss(deal)");
             cycleBreak(chatId);
             return;
         }
+
+        activeDealStore.addDeal(deal);
         messageSender.send(chatId, EmojiUtils.OKAY + "Сделка открыта!\n" + deal.bigDealToString() + "\n" + result);
     }
+
 
 
 
@@ -273,6 +269,8 @@ public class BotCommandHandler {
         cycleBreak(chatId);
     }
 
+    //метод обновления, а точнее метод восстановления сделок после перезагрузки бота,
+    // но пока это просто метод для обновления информации о сделках
     private void handleUpdate(long chatId) {
         messageSender.send(chatId, "Обновление сделок из Bybit...");
         // TODO: реализовать обновление сделок из Bybit, а пока будет просто обновление информации о позициях
@@ -281,14 +279,14 @@ public class BotCommandHandler {
         messageSender.send(chatId, "🔄 Обновление сделок из Bybit...");
         for (Deal deal : activeDealStore.getAllDeals()) {
             try {
-                PositionInfo pos = bybitPositionTrackerService.getPosition(deal.getSymbol().getSymbol());
+                PositionInfo pos = bybitManager.getBybitPositionTrackerService().getPosition(deal.getSymbol().getSymbol());
                 if (pos == null) {
                     // Позиция закрыта вручную
-                    messageSender.send(chatId, "🗑️ Позиция " + deal.getSymbol() + " больше не активна (закрыта на бирже).");
+                    messageSender.send(chatId, "🗑️ Позиция " + deal.getSymbol() + " больше не активна (закрыта на бирже ).");
                     activeDealStore.removeDeal(deal.getId());
                 } else {
                     // Обновляем состояние
-                    deal.updateFromPosition(pos); // реализуйте этот метод
+                    deal.updateDealFromBybitPosition(pos); // реализуйте этот метод
                 }
             } catch (Exception e) {
                 LoggerUtils.logError("Ошибка обновления позиции для " + deal.getSymbol(), e);
@@ -335,7 +333,7 @@ public class BotCommandHandler {
     }
     // ------------------
     private  void updateLossPrecent(long chatId) {
-        double updateLoss = StrategyFactory.getStrategy(strategyName).lossUpdate(bybitAccountService);
+        double updateLoss = StrategyFactory.getStrategy(strategyName).RiskUpdate(bybitManager.getBybitAccountService());
         String message = "Предел риска обновлен на " +  updateLoss + "$ на позицию";
         messageSender.send(chatId, message);
         LoggerUtils.logInfo(message);

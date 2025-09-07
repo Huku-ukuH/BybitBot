@@ -42,7 +42,7 @@ public class DealCalculator {
         double stopLoss = deal.getStopLoss() != null && deal.getStopLoss() > 0
                 ? deal.getStopLoss()
                 : getDefaultStopLoss(deal, strategyConfig);
-        deal.setStopLoss(stopLoss);
+        deal.setStopLoss(MathUtils.formatPrice(deal.getEntryPrice(), stopLoss));
         LoggerUtils.logInfo("SL " + deal.getSymbol() + " = " + stopLoss);
 
 
@@ -65,11 +65,11 @@ public class DealCalculator {
         }
 
         LoggerUtils.logDebug("DealCalculator calculate - Закончился рассчет " + deal.getSymbol());
-        return "Размер позиции: " + MathUtils.formatPrice(0.01, positionSize) + "\n" +
+        return "QTY: " + MathUtils.formatPrice(0.01, positionSize) + "\n" +
                 "SL: " + MathUtils.formatPrice(deal.getEntryPrice(), deal.getStopLoss()) + "\n" +
                 "LV: " + leverageUsed + "x\n" +
-                "Необходимый капитал: " + MathUtils.formatPrice(0.01, requiredCapital) + " USDT\n" +
-                "Баланс аккаунта: " + MathUtils.formatPrice(0.01, actualBalance) + " USDT";
+                "ReqCap: " + MathUtils.formatPrice(0.01, requiredCapital) + " USDT\n" +
+                "Balance: " + MathUtils.formatPrice(0.01, actualBalance) + " USDT";
     }
 
 

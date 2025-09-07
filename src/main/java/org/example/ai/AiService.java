@@ -84,17 +84,20 @@ public class AiService {
      */
     public DealRequest parseSignal(String signalText) {
         ValidationUtils.checkNotNull(signalText, "Signal text cannot be null");
-
+        String responseJson = null;
         try {
             String promptTemplate = loadPrompt("get_signal_prompt.txt");
             String fullPrompt = promptTemplate + "\n\n### СИГНАЛ\n" + signalText.trim();
 
-            String responseJson = sendPostRequest(fullPrompt);
-
+            responseJson = sendPostRequest(fullPrompt);
             return JsonUtils.fromJson(responseJson, DealRequest.class);
         } catch (Exception e) {
-            LoggerUtils.logError("❌ AI: Ошибка при парсинге сигнала", e);
-            throw new RuntimeException("Ошибка при обработке сигнала ИИ: " + e.getMessage(), e);
+            String errorMsg = "❌ AI: Ошибка при парсинге сигнала. Ответ нейросети: " + (responseJson != null ? responseJson : "null");
+            LoggerUtils.logError(errorMsg, e);
+
+            // 🚀 Пробрасываем с контекстом
+            throw new RuntimeException("Ошибка при обработке сигнала ИИ: " + e.getMessage() +
+                    "\nОтвет ИИ: " + responseJson + " ", e);
         }
     }
 

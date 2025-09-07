@@ -1,103 +1,206 @@
 package org.example.deal;
-import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
+
 import org.example.model.Symbol;
 import org.example.util.ValidationUtils;
 
-//Цель:
-//Хранить все активные сделки (Deal) в памяти, обеспечивать доступ к ним по ID или символу, управлять их жизненным циклом.
-//
-//Функционал:
-//Добавление новой сделки
-//Поиск сделок по ID или символу
-//Обновление данных сделки
-//Удаление сделки
-//Получение списка всех активных сделок
+import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.function.Consumer;
+
+/**
+ * Хранилище активных сделок.
+ * Обеспечивает потокобезопасный доступ, поддержку событий и эффективный поиск по символу.
+ */
 public class ActiveDealStore {
-    // Хранилище активных сделок: id -> Deal
-    private final Map<String, Deal> activeDeals = new ConcurrentHashMap<>();
+    // Основное хранилище: id -> Deal
+    private final Map<String, Deal> dealsById = new ConcurrentHashMap<>();
+
+    // Индекс для быстрого поиска: symbol -> Set<Deal>
+    private final Map<Symbol, Set<Deal>> dealsBySymbol = new ConcurrentHashMap<>();
+
+    // Слушатели событий (например, PriceMonitor)
+    private final List<Consumer<Deal>> onDealAddedListeners = new CopyOnWriteArrayList<>();
+    private final List<Consumer<Deal>> onDealRemovedListeners = new CopyOnWriteArrayList<>();
+
+    // --- Управление сделками ---
 
     /**
-     * Добавляет новую сделку в хранилище
+     * Добавляет новую сделку.
+     * Уведомляет всех подписчиков.
      */
     public void addDeal(Deal deal) {
         ValidationUtils.checkNotNull(deal, "Deal cannot be null");
-        activeDeals.put(deal.getId(), deal);
+        ValidationUtils.checkNotNull(deal.getId(), "Deal ID cannot be null");
+        ValidationUtils.checkNotNull(deal.getSymbol(), "Deal symbol cannot be null");
+
+        dealsById.put(deal.getId(), deal);
+
+        // Обновляем индекс по символу
+        dealsBySymbol
+                .computeIfAbsent(deal.getSymbol(), k -> ConcurrentHashMap.newKeySet())
+                .add(deal);
+
+        // Уведомляем слушателей
+        onDealAddedListeners.forEach(listener -> listener.accept(deal));
     }
 
     /**
-     * Возвращает список всех активных сделок
+     * Удаляет сделку по ID.
+     * @return true, если сделка была удалена
      */
-    public List<Deal> getAllDeals() {
-        return new ArrayList<>(activeDeals.values());
-    }
+    public boolean removeDeal(String id) {
+        Deal deal = dealsById.remove(id);
+        if (deal == null) return false;
 
-    /**
-     * Возвращает список сделок по символу
-     */
-    public List<Deal> getDealsBySymbol(Symbol symbol) {
-        List<Deal> result = new ArrayList<>();
-        for (Deal deal : activeDeals.values()) {
-            if (deal.getSymbol().equals(symbol)) {
-                result.add(deal);
+        // Удаляем из индекса по символу
+        Set<Deal> deals = dealsBySymbol.get(deal.getSymbol());
+        if (deals != null) {
+            deals.remove(deal);
+            if (deals.isEmpty()) {
+                dealsBySymbol.remove(deal.getSymbol());
             }
         }
-        return result;
-    }
 
-    /**
-     * Обновляет существующую сделку
-     */
-    public boolean updateDeal(Deal updatedDeal) {
-        if (!activeDeals.containsKey(updatedDeal.getId())) {
-            return false;
-        }
-        activeDeals.put(updatedDeal.getId(), updatedDeal);
+        // Уведомляем об удалении
+        onDealRemovedListeners.forEach(listener -> listener.accept(deal));
         return true;
     }
 
     /**
-     * Удаляет сделку по ID
+     * Обновляет сделку.
+     * Если изменился символ — перестраивает индекс.
      */
-    public boolean removeDeal(String id) {
+    public boolean updateDeal(Deal updatedDeal) {
+        ValidationUtils.checkNotNull(updatedDeal, "Updated deal cannot be null");
+        if (!dealsById.containsKey(updatedDeal.getId())) {
+            return false;
+        }
 
-        return activeDeals.remove(id) != null;
-    }
+        Deal oldDeal = dealsById.get(updatedDeal.getId());
+        Symbol oldSymbol = oldDeal.getSymbol();
+        Symbol newSymbol = updatedDeal.getSymbol();
 
-    /**
-     * Удаляет все завершённые сделки (неактивные)
-     */
-    public int removeCompletedDeals() {
-        int count = 0;
-        Iterator<Deal> iterator = activeDeals.values().iterator();
-        while (iterator.hasNext()) {
-            Deal deal = iterator.next();
-            if (!deal.isActive()) {
-                iterator.remove();
-                count++;
+        // Обновляем основное хранилище
+        dealsById.put(updatedDeal.getId(), updatedDeal);
+
+        // Если символ изменился — перестраиваем индекс
+        if (!oldSymbol.equals(newSymbol)) {
+            // Удаляем из старого
+            Set<Deal> oldSet = dealsBySymbol.get(oldSymbol);
+            if (oldSet != null) {
+                oldSet.remove(oldDeal);
+                if (oldSet.isEmpty()) {
+                    dealsBySymbol.remove(oldSymbol);
+                }
+            }
+            // Добавляем в новый
+            dealsBySymbol
+                    .computeIfAbsent(newSymbol, k -> ConcurrentHashMap.newKeySet())
+                    .add(updatedDeal);
+        } else {
+            // Просто заменяем в том же множестве
+            Set<Deal> set = dealsBySymbol.get(oldSymbol);
+            if (set != null) {
+                set.remove(oldDeal);
+                set.add(updatedDeal);
             }
         }
-        return count;
+
+        return true;
+    }
+
+    // --- Получение данных ---
+
+    /**
+     * Возвращает все активные сделки.
+     * Результат — копия, чтобы избежать внешних модификаций.
+     */
+    public List<Deal> getAllDeals() {
+        return new ArrayList<>(dealsById.values());
     }
 
     /**
-     * Проверяет, существует ли сделка
+     * Возвращает сделки по символу.
+     * Результат — неизменяемая копия.
+     */
+    public List<Deal> getDealsBySymbol(Symbol symbol) {
+        Set<Deal> deals = dealsBySymbol.get(symbol);
+        return deals == null ? Collections.emptyList() : new ArrayList<>(deals);
+    }
+
+    /**
+     * Возвращает сделку по ID.
+     */
+    public Deal getDealById(String id) {
+        return dealsById.get(id);
+    }
+
+    /**
+     * Проверяет, существует ли сделка.
      */
     public boolean containsDeal(String id) {
-        return activeDeals.containsKey(id);
+        return dealsById.containsKey(id);
     }
 
     /**
-     * Возвращает количество активных сделок
+     * Возвращает количество активных сделок.
      */
     public int size() {
-        return activeDeals.size();
+        return dealsById.size();
+    }
+
+    // --- Управление жизненным циклом ---
+
+    /**
+     * Удаляет все неактивные сделки.
+     * @return количество удалённых сделок
+     */
+    public int removeCompletedDeals() {
+        List<Deal> completed = new ArrayList<>();
+        for (Deal deal : dealsById.values()) {
+            if (!deal.isActive()) {
+                completed.add(deal);
+            }
+        }
+
+        // Удаляем каждую завершённую сделку
+        completed.forEach(deal -> removeDeal(deal.getId()));
+        return completed.size();
     }
 
     /**
-     * Очищает хранилище (для тестов или перезапуска)
+     * Полная очистка хранилища (для тестов)
      */
     public void clear() {
-        activeDeals.clear();
+        dealsById.clear();
+        dealsBySymbol.clear();
+    }
+
+    // --- События (Event Listeners) ---
+
+    /**
+     * Добавляет слушателя на событие "сделка добавлена"
+     */
+    public void addOnDealAddedListener(Consumer<Deal> listener) {
+        onDealAddedListeners.add(listener);
+    }
+
+    /**
+     * Добавляет слушателя на событие "сделка удалена"
+     */
+    public void addOnDealRemovedListener(Consumer<Deal> listener) {
+        onDealRemovedListeners.add(listener);
+    }
+
+    /**
+     * Удаляет слушателя
+     */
+    public void removeOnDealAddedListener(Consumer<Deal> listener) {
+        onDealAddedListeners.remove(listener);
+    }
+
+    public void removeOnDealRemovedListener(Consumer<Deal> listener) {
+        onDealRemovedListeners.remove(listener);
     }
 }

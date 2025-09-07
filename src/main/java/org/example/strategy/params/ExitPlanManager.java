@@ -49,6 +49,7 @@ public class ExitPlanManager {
                 );
 
                 deal.addOrderId(new OrderManager(orderResponse.getOrderResult().getOrderId(), OrderManager.OrderType.TP, tpPrice));
+                deal.addTakeProfit(tpPrice);
 
                 double entryPrice = deal.getEntryPrice();
                 double leverage = deal.getLeverageUsed();

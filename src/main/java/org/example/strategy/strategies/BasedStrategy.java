@@ -1,9 +1,15 @@
 
 package org.example.strategy.strategies;
 
+import org.example.ai.AiService;
 import org.example.bybit.dto.TickerResponse;
 import org.example.bybit.service.BybitAccountService;
+import org.example.bybit.service.BybitMarketService;
 import org.example.deal.Deal;
+import org.example.deal.DealCalculator;
+import org.example.deal.DealValidator;
+import org.example.deal.dto.DealRequest;
+import org.example.deal.dto.DealValidationResult;
 import org.example.strategy.params.ExitPlan;
 import org.example.model.Direction;
 import org.example.strategy.config.StrategyConfig;
@@ -41,6 +47,32 @@ public class BasedStrategy implements TradingStrategy {
     public StrategyConfig getConfig() {
         return this.config;
     }
+
+    @Override
+    public Deal createDeal(AiService aiService, String messageText, long chatId, String strategyName) {
+        LoggerUtils.logDebug("Создание сделки по сигналу: " + messageText);
+        try {
+            DealRequest request = aiService.parseSignal(messageText);
+            Deal deal = new Deal(request);
+            deal.setChatId(chatId);
+            deal.setStrategyName(strategyName);
+            return deal;
+        } catch (Exception e) {
+            LoggerUtils.logError("❌ Не удалось создать сделку по сигналу: " + messageText, e);
+            throw e;
+        }
+    }
+
+    @Override
+    public DealValidationResult validateDeal(Deal deal, BybitMarketService marketService) {
+        return new DealValidator().validate(deal, marketService);
+    }
+
+    @Override
+    public String calculateDeal(Deal deal, DealCalculator dealCalculator) {
+         return dealCalculator.calculate(deal);
+    }
+
 
     @Override
     public ExitPlan planExit(Deal deal) {
@@ -152,7 +184,7 @@ public class BasedStrategy implements TradingStrategy {
                     (direction == Direction.SHORT && pnlPercent >= targetPnlLevel);
 
             if (levelReached && !triggeredPnlLevels.contains(targetPnlLevel)) {
-                deal.addTakeProfit(currentPrice);
+               // deal.addTakeProfit(currentPrice);
                 triggeredPnlLevels.add(targetPnlLevel);
                 LoggerUtils.logInfo("BasedStrategy: Достигнут PnL " + String.format("%.2f", targetPnlLevel) +
                         "%. Установлен TP. Планируется выход " + exitPercentage + "% позиции.");
@@ -179,7 +211,7 @@ public class BasedStrategy implements TradingStrategy {
         triggeredPnlLevels.clear();
     }
     @Override
-    public double lossUpdate(BybitAccountService bybitAccountService) {
+    public double RiskUpdate(BybitAccountService bybitAccountService) {
         double updateLoss = bybitAccountService.getUsdtBalance()/100 * ValuesUtil.getDefaultLossPrecent();
         config = new StrategyConfig(null, updateLoss, new int[]{5, 10, 20}, 15.0, null, null
         );

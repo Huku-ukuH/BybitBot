@@ -7,6 +7,7 @@ import org.example.bybit.client.BybitWebSocketClient;
 import org.example.bot.MessageSender;
 import org.example.deal.ActiveDealStore;
 import org.example.deal.Deal;
+import org.example.monitor.dto.PriceUpdate;
 import org.example.strategy.params.StopLossManager;
 import org.example.util.LoggerUtils;
 
@@ -28,11 +29,10 @@ public class PriceMonitor {
     private final Map<String, List<Deal>> symbolSubscribers = new ConcurrentHashMap<>();
 
     public PriceMonitor(ActiveDealStore activeDealStore,
-                        StopLossManager stopLossManager,
-                        MessageSender messageSender) {
+                        MessageSender messageSender, StopLossManager stopLossManager) {
         this.activeDealStore = activeDealStore;
-        this.stopLossManager = stopLossManager;
         this.messageSender = messageSender;
+        this.stopLossManager = stopLossManager;
     }
 
 
@@ -44,29 +44,33 @@ public class PriceMonitor {
         webSocketClient.subscribeToTicker(deal.getSymbol());
     }
 
-    public void handleMessage(String message) {
-        Pattern symbolPattern = Pattern.compile("\\\"symbol\\\":\\\"(.*?)\\\"");
-        Pattern pricePattern = Pattern.compile("\\\"lastPrice\\\":\\\"(.*?)\\\"");
-
-        Matcher symbolMatcher = symbolPattern.matcher(message);
-        Matcher priceMatcher = pricePattern.matcher(message);
-
-        if (symbolMatcher.find() && priceMatcher.find()) {
-            String symbol = symbolMatcher.group(1);
-            double price = Double.parseDouble(priceMatcher.group(1));
-            onPriceUpdate(symbol, price);
-        }
+    public void handlePriceUpdate(PriceUpdate update) {
+        LoggerUtils.logInfo("📈 Цена обновлена: " + update.getSymbol() + " = " + update.getPrice());
+        onPriceUpdate(update.getSymbol(), update.getPrice());
     }
 
+
+
+
+    // Работать дальше с этим методом, он должен у каждой сделки вызывать стратегию, а у стратегии метод onPriceUpdate.
+    // Стоп лосс сам по себе обновляться не должен, иначе это получается внеплановый трейлинг, все должно быть согласовано со стратегией,
+    // пока что дефолтный вариант- ставить стоп на(под твх в зону безубытка) при исполнении первого тейка
     public void onPriceUpdate(String symbol, double currentPrice) {
         List<Deal> deals = symbolSubscribers.get(symbol);
-        if (deals == null || deals.isEmpty()) return;
+        if (deals == null || deals.isEmpty()) {
+            LoggerUtils.logDebug("🔍 Нет активных сделок для: " + symbol);
+            return;
+        }
+
+        LoggerUtils.logInfo("🔄 Проверка " + deals.size() + " сделок по " + symbol + " при цене " + currentPrice);
 
         synchronized (deals) {
             for (Deal deal : deals) {
                 if (!deal.isActive()) {
+                    LoggerUtils.logDebug("⏭️ Сделка неактивна: " + deal.getSymbol());
                     continue;
                 }
+
                 boolean slUpdated = stopLossManager.moveStopLoss(deal, currentPrice);
                 if (slUpdated) {
                     String message = String.format("✅ Стоп-лосс обновлён для %s: %.2f", symbol, deal.getStopLoss());

@@ -1,19 +1,25 @@
 package org.example.bot;
 
 import io.github.cdimascio.dotenv.Dotenv;
+import lombok.Getter;
+import org.example.ai.AiService;
+import org.example.bybit.BybitManager;
+import org.example.deal.ActiveDealStore;
 import org.example.util.LoggerUtils;
 import org.telegram.telegrambots.bots.TelegramLongPollingBot;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
 import org.telegram.telegrambots.meta.api.objects.Update;
 import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
-
+@Getter
 public class TradingBot extends TelegramLongPollingBot {
-    private final BotCommandHandler commandHandler;
     private final UserStorage userStorage = new UserStorage();
+    private final AiService aiService = new AiService();
+    private final BybitManager bybitManager = new BybitManager();
+    private final ActiveDealStore activeDealStore = new ActiveDealStore();
+    private final MessageSender messageSender = new MessageSender(this);
+    private final BotCommandHandler commandHandler = new BotCommandHandler( bybitManager, aiService, activeDealStore, messageSender);
 
-
-    public TradingBot(BotCommandHandler commandHandler) {
-        this.commandHandler = commandHandler;
+    public TradingBot() {
         userStorage.addAdminUser(340827223L);
         userStorage.addUserIfNotExists(949310446); // сня
         userStorage.addUserIfNotExists(1804232343); //his

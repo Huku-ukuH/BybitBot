@@ -13,6 +13,7 @@ import org.example.strategy.strategies.TradingStrategy;
 import org.example.util.LoggerUtils;
 import org.example.util.MathUtils;
 
+
 import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -21,8 +22,8 @@ import java.util.concurrent.atomic.AtomicInteger;
 public class Deal {
     // === Основные поля сделки ===
     private String id;  // Уникальный ID сделки
-    private String note;
     private long chatId;
+    private String note;
     private Symbol symbol;
     private Double stopLoss;
     private ExitPlan exitPlan;
@@ -49,8 +50,9 @@ public class Deal {
 
     public Deal(Symbol symbol, Direction direction, EntryType entryType, Double entryPrice,
                 Double stopLoss, List<Double> takeProfits) {
-        this.id = "default";
+
         this.symbol = symbol;
+        this.id = "default " + symbol + id;
         this.direction = direction;
         this.entryType = entryType;
         this.entryPrice = entryPrice;
@@ -115,13 +117,12 @@ public class Deal {
     }
 
     public void addTakeProfit(double tp) {
-        if (!takeProfits.contains(tp)) {
-            takeProfits.add(tp);
-        }
+        takeProfits.add(tp);
+
     }
 
 
-    public void updateFromPosition(PositionInfo positionInfo){
+    public void updateDealFromBybitPosition(PositionInfo positionInfo){
         if (positionInfo == null || !this.symbol.getSymbol().equals(positionInfo.getSymbol())) {
             return;
         }
@@ -194,14 +195,14 @@ public class Deal {
 
     @Override
     public String toString() {
-        return "🟢\\\"" + strategyName + "\uD83E\uDDE0\\\" " + symbol + "—" + direction.toString().toLowerCase() + entryType + "\n" +
-                "💸 Цена входа: ~" + entryPrice +
-                "🛑 SL: " + stopLoss + "\n" +
-                "✅ TP: " + takeProfits + "\n";
+        return "🟢\"" + strategyName + "\uD83E\uDDE0\" " + symbol + " " + direction.toString().charAt(0) + " " + entryType +
+                "\n EP: " + entryPrice +
+                "\n SL: " + stopLoss +
+                "\n TP: " + takeProfits + "\n";
     }
 
     public String bigDealToString() {
-        return id + "\n" + this + "QTY: " + positionSize + "\n" + "Риск: " + potentialLoss + "$\n";
+        return id + "\n" + this + "QTY: " + positionSize + "\n" + "Риск: " + Math.round(getPositionSize() * Math.abs(entryPrice - stopLoss) * 1000.0) / 1000.0 + " $\n";
     }
 
     public StringBuilder positiveDeal() {

@@ -68,10 +68,10 @@ public class ExitPlan {
             double targetPrice;
 
             if (direction == Direction.LONG) {
-                targetPrice = entryPrice * (1 + pnlPercent / 100.0);                              //возможное место ошибок
+                targetPrice =MathUtils.formatPrice(entryPrice, entryPrice * (1 + pnlPercent / 100.0));                        //возможное место ошибок
                 LoggerUtils.logInfo("  ➤ " + pnlPercent + "% → цена = " + entryPrice + " * (1 + " + (pnlPercent / 100.0) + ") = " + MathUtils.formatPrice(entryPrice, targetPrice));
             } else {
-                targetPrice = entryPrice * (1 - pnlPercent / 100.0);                              //возможное место ошибок
+                targetPrice =MathUtils.formatPrice(entryPrice, entryPrice * (1 - pnlPercent / 100.0));                               //возможное место ошибок
                 LoggerUtils.logInfo("  ➤ " + pnlPercent + "% → цена = " + entryPrice + " * (1 - " + (pnlPercent / 100.0) + ") = " + MathUtils.formatPrice(entryPrice, targetPrice));
             }
 

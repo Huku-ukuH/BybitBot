@@ -5,6 +5,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Data;
 import lombok.Getter;
 import org.example.model.Direction;
+import org.example.util.LoggerUtils;
 
 /**
  * DTO для актуальной позиции с Bybit (v5/position/list)
@@ -58,13 +59,29 @@ public class PositionInfo {
         return (unrealizedPnl / initialMargin) * 100.0;
     }
     public double getPotentialLoss() {
-        double delta = Math.abs(entryPrice - stopLoss);
-        return Math.round(size * delta * 1000.0) / 1000.0;
+        return Math.round(size * Math.abs(entryPrice - stopLoss) * 1000.0) / 1000.0;
     }
 
 
     @Override
     public String toString() {
+        LoggerUtils.logInfo("ПОЛНАЯ ИНФОРМАЦИЯ О ПОЗИЦИИ С БАЙБИТ \nPositionInfo{" +
+                "symbol='" + symbol + '\'' +
+                ", side='" + side + '\'' +
+                ", size=" + size +
+                ", entryPrice=" + entryPrice +
+                ", leverage=" + leverage +
+                ", positionValue=" + positionValue +
+                ", unrealizedPnl=" + unrealizedPnl +
+                ", realizedPnl=" + realizedPnl +
+                ", tpSlMode='" + tpSlMode + '\'' +
+                ", positionStatus='" + positionStatus + '\'' +
+                ", bustPrice=" + bustPrice +
+                ", stopLoss=" + stopLoss +
+                ", takeProfit=" + takeProfit +
+                ", trailingStop=" + trailingStop +
+                ", isolatedMargin=" + isolatedMargin +
+                '}');
         return
                 "\nUnrealPn:" + unrealizedPnl +
                 ", realPnl:" + realizedPnl +

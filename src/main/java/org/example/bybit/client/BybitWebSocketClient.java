@@ -1,10 +1,10 @@
 // BybitWebSocketClient.java
 package org.example.bybit.client;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.example.model.Symbol;
+import org.example.monitor.dto.PriceUpdate;
 import org.example.util.LoggerUtils;
 import org.java_websocket.client.WebSocketClient;
 import org.java_websocket.handshake.ServerHandshake;
@@ -16,31 +16,33 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 
+
 public class BybitWebSocketClient {
-    private static final String WEBSOCKET_URI = "wss://stream.bybit.com/v5/public/linear";
-    private final Consumer<String> messageHandler;
+    private static final String WEBSOCKET_URI_TESTNET = "wss://stream-testnet.bybit.com/v5/public/linear";
+    private static final String WEBSOCKET_URI_WAR = "wss://stream.bybit.com/v5/public/linear";
+
+    // Теперь принимает PriceUpdate, а не String
+    private final Consumer<PriceUpdate> messageHandler;
+
     private WebSocketClient client;
     private final Set<String> subscribedSymbols = new HashSet<>();
-    private final ObjectMapper objectMapper = new ObjectMapper();
+    private final ObjectMapper objectMapper = new ObjectMapper(); // можно использовать ваш JsonUtils.createObjectMapper()
     private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1);
 
-    public BybitWebSocketClient(Consumer<String> messageHandler) {
+    public BybitWebSocketClient(Consumer<PriceUpdate> messageHandler) {
         this.messageHandler = messageHandler;
     }
 
     public void connect() {
-        connectAsync();
-        // План переподключения каждые 30 сек, если соединение упало
+        connectAsync(); // ← запускает подключение в фоне
         scheduler.scheduleAtFixedRate(this::reconnectIfClosed, 30, 30, TimeUnit.SECONDS);
     }
-
     private void connectAsync() {
         try {
-            client = new WebSocketClient(new URI(WEBSOCKET_URI)) {
+            client = new WebSocketClient(new URI(WEBSOCKET_URI_TESTNET)) {
                 @Override
                 public void onOpen(ServerHandshake handshake) {
                     LoggerUtils.logInfo("✅ Подключение к WebSocket Bybit установлено");
-                    // Восстанавливаем подписки
                     resubscribeAll();
                 }
 
@@ -50,14 +52,23 @@ public class BybitWebSocketClient {
                         LoggerUtils.logInfo("🟢 Подтверждение подписки: " + message);
                         return;
                     }
+
                     try {
-                        JsonNode node = objectMapper.readTree(message);
-                        String symbol = node.at("/data/symbol").asText(null);
-                        if (symbol != null) {
-                            messageHandler.accept(message); // ← передаём дальше
+                        JsonNode root = objectMapper.readTree(message);
+                        JsonNode dataNode = root.path("data");
+
+                        if (dataNode.isMissingNode()) return;
+
+                        // Поддержка одиночного объекта и массива
+                        if (dataNode.isArray()) {
+                            for (JsonNode node : dataNode) {
+                                processTickerNode(node);
+                            }
+                        } else {
+                            processTickerNode(dataNode);
                         }
-                    } catch (JsonProcessingException e) {
-                        LoggerUtils.logWarn("Не удалось разобрать JSON: " + message);
+                    } catch (Exception e) {
+                        LoggerUtils.logError("Ошибка парсинга WebSocket-сообщения: " + message, e);
                     }
                 }
 
@@ -74,6 +85,27 @@ public class BybitWebSocketClient {
             client.connect();
         } catch (Exception e) {
             LoggerUtils.logError("❌ Ошибка запуска WebSocket", e);
+        }
+    }
+
+    // Отдельный метод для обработки одного тикера
+    private void processTickerNode(JsonNode node) {
+        try {
+            String symbol = node.path("symbol").asText(null);
+            String lastPriceStr = node.path("lastPrice").asText(null);
+
+            if (symbol == null || lastPriceStr == null) return;
+
+            double lastPrice = Double.parseDouble(lastPriceStr.trim());
+
+            // Создаём DTO и отправляем дальше
+            PriceUpdate update = new PriceUpdate(symbol, lastPrice);
+            messageHandler.accept(update);
+
+        } catch (NumberFormatException e) {
+            LoggerUtils.logError("Некорректная цена в тикере: " + node, e);
+        } catch (Exception e) {
+            LoggerUtils.logError("Ошибка при обработке тикера: " + e.getMessage(), e);
         }
     }
 

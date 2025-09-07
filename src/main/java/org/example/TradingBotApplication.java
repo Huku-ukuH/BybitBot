@@ -2,59 +2,40 @@
 package org.example;
 import lombok.Getter;
 import lombok.Setter;
-import org.example.ai.AiService;
-import org.example.bot.BotCommandHandler;
-import org.example.bot.MessageSender;
 import org.example.bot.TradingBot;
 import org.example.bybit.client.BybitWebSocketClient;
-import org.example.bybit.service.*;
-import org.example.bybit.auth.BybitAuthConfig;
-import org.example.bybit.client.BybitHttpClient;
-import org.example.deal.ActiveDealStore;
 import org.example.monitor.PriceMonitor;
-import  org.example.strategy.params.StopLossManager;
+import org.example.strategy.params.StopLossManager;
 import org.example.util.LoggerUtils;
 import org.telegram.telegrambots.meta.TelegramBotsApi;
 import org.telegram.telegrambots.updatesreceivers.DefaultBotSession;
-
 import java.util.Locale;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 @Getter
 @Setter
+// TradingBotApplication.java
 public class TradingBotApplication {
     public static void main(String[] args) {
         ExecutorService executor = Executors.newFixedThreadPool(4);
-        Locale.setDefault(Locale.US); //Установка системы условных знаков (разделяем тысячи точкой, а не запятой как в RU)
+        Locale.setDefault(Locale.US);
 
         try {
+            TradingBot tradingBot = new TradingBot();
 
-            AiService aiService = new AiService();
-            BybitAuthConfig bybitAuthConfig = new BybitAuthConfig();
-            BybitHttpClient bybitHttpClient = new BybitHttpClient(bybitAuthConfig);
-            BybitAccountService accountService = new BybitAccountService(bybitHttpClient);
-            BybitOrderService bybitOrderService = new BybitOrderService(bybitHttpClient);
-            BybitMarketService bybitMarketService = new BybitMarketService(bybitHttpClient);
-            BybitPositionTrackerService bybitPositionTrackerService = new BybitPositionTrackerService(bybitHttpClient);
-            BybitMonitorService bybitMonitorService = new BybitMonitorService();  //пока не используется
-            ActiveDealStore activeDealStore = new ActiveDealStore();
-
-            BotCommandHandler commandHandler = new BotCommandHandler(
-                    aiService, accountService, activeDealStore,
-                    bybitOrderService, bybitMonitorService, bybitMarketService, bybitPositionTrackerService);
-
-            TradingBot tradingBot = new TradingBot(commandHandler);
-            MessageSender messageSender = new MessageSender(tradingBot);
-            commandHandler.setMessageSender(messageSender);
             StopLossManager stopLossManager = new StopLossManager();
-
             PriceMonitor priceMonitor = new PriceMonitor(
-                    activeDealStore, stopLossManager, messageSender
+                    tradingBot.getActiveDealStore(),
+                    tradingBot.getMessageSender(), stopLossManager
             );
-            BybitWebSocketClient webSocketClient = new BybitWebSocketClient(priceMonitor::handleMessage);
+
+            // 🔥 Передаём ссылку на метод, принимающий PriceUpdate
+            BybitWebSocketClient webSocketClient = new BybitWebSocketClient(priceMonitor::handlePriceUpdate);
+
             priceMonitor.setWebSocketClient(webSocketClient);
             webSocketClient.connect();
+            tradingBot.getActiveDealStore().addOnDealAddedListener(priceMonitor::subscribe);
 
             executor.submit(priceMonitor::startMonitoringAllDeals);
 
@@ -67,17 +48,16 @@ public class TradingBotApplication {
                 }
             });
 
-            LoggerUtils.logInfo("Main - \uD83D\uDE80 Бот запущен...");
+            LoggerUtils.logInfo("Main - 🚀 Бот запущен...");
 
             Runtime.getRuntime().addShutdownHook(new Thread(() -> {
-                LoggerUtils.logInfo("\uD83D\uDEA9 Завершение работы программы...");
+                LoggerUtils.logInfo("🛑 Завершение работы...");
                 webSocketClient.disconnect();
                 executor.shutdownNow();
             }));
 
         } catch (Exception e) {
-            LoggerUtils.logInfo("❌ Ошибка запуска программы: " + e.getMessage());
-            e.printStackTrace();
+            LoggerUtils.logError("❌ Ошибка запуска программы", e);
             executor.shutdownNow();
         }
     }
