@@ -67,48 +67,6 @@ public class ActiveDealStore {
         return true;
     }
 
-    /**
-     * Обновляет сделку.
-     * Если изменился символ — перестраивает индекс.
-     */
-    public boolean updateDeal(Deal updatedDeal) {
-        ValidationUtils.checkNotNull(updatedDeal, "Updated deal cannot be null");
-        if (!dealsById.containsKey(updatedDeal.getId())) {
-            return false;
-        }
-
-        Deal oldDeal = dealsById.get(updatedDeal.getId());
-        Symbol oldSymbol = oldDeal.getSymbol();
-        Symbol newSymbol = updatedDeal.getSymbol();
-
-        // Обновляем основное хранилище
-        dealsById.put(updatedDeal.getId(), updatedDeal);
-
-        // Если символ изменился — перестраиваем индекс
-        if (!oldSymbol.equals(newSymbol)) {
-            // Удаляем из старого
-            Set<Deal> oldSet = dealsBySymbol.get(oldSymbol);
-            if (oldSet != null) {
-                oldSet.remove(oldDeal);
-                if (oldSet.isEmpty()) {
-                    dealsBySymbol.remove(oldSymbol);
-                }
-            }
-            // Добавляем в новый
-            dealsBySymbol
-                    .computeIfAbsent(newSymbol, k -> ConcurrentHashMap.newKeySet())
-                    .add(updatedDeal);
-        } else {
-            // Просто заменяем в том же множестве
-            Set<Deal> set = dealsBySymbol.get(oldSymbol);
-            if (set != null) {
-                set.remove(oldDeal);
-                set.add(updatedDeal);
-            }
-        }
-
-        return true;
-    }
 
     // --- Получение данных ---
 

@@ -5,6 +5,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Data;
 import lombok.Getter;
 import org.example.model.Direction;
+import org.example.model.Symbol;
 import org.example.util.LoggerUtils;
 
 /**
@@ -17,23 +18,23 @@ import org.example.util.LoggerUtils;
 public class PositionInfo {
 
     @JsonProperty("symbol")
-    private String symbol;
+    private Symbol symbol;
     @JsonProperty("side")
-    private String side;
+    private Direction side;
     @JsonProperty("size")
     private double size;
-    @JsonProperty("entryPrice")
-    private double entryPrice;
+    @JsonProperty("avgPrice")
+    private double avgPrice;
     @JsonProperty("leverage")
     private double leverage;
     @JsonProperty("positionValue")
     private double positionValue;         //стоимость
-    @JsonProperty("unrealizedPnl")
-    private double unrealizedPnl;        //нереализ pnl
+    @JsonProperty("unrealisedPnl")
+    private double unrealisedPnl;        //нереализ pnl
     @JsonProperty("cumulatedRealisedPnl")
     private double realizedPnl;          //реализ pnl
-    @JsonProperty("tpSlMode")
-    private String tpSlMode;             //Режим установки TP/SL: "Full" (полное закрытие), "Partial" (частичное)
+    @JsonProperty("tpslMode")
+    private String tpslMode;             //Режим установки TP/SL: "Full" (полное закрытие), "Partial" (частичное)
     @JsonProperty("positionStatus")
     private String positionStatus;       //Статус позиции: "Normal", "Liq" (ликвидация), "Adl" (ADL), "Closed"
     @JsonProperty("bustPrice")
@@ -56,10 +57,10 @@ public class PositionInfo {
         }
         double initialMargin = positionValue / leverage;
         if (initialMargin == 0) return 0.0;
-        return (unrealizedPnl / initialMargin) * 100.0;
+        return (unrealisedPnl / initialMargin) * 100.0;
     }
     public double getPotentialLoss() {
-        return Math.round(size * Math.abs(entryPrice - stopLoss) * 1000.0) / 1000.0;
+        return Math.round(size * Math.abs(avgPrice - stopLoss) * 1000.0) / 1000.0;
     }
 
 
@@ -69,12 +70,12 @@ public class PositionInfo {
                 "symbol='" + symbol + '\'' +
                 ", side='" + side + '\'' +
                 ", size=" + size +
-                ", entryPrice=" + entryPrice +
+                ", entryPrice=" + avgPrice +
                 ", leverage=" + leverage +
                 ", positionValue=" + positionValue +
-                ", unrealizedPnl=" + unrealizedPnl +
+                ", unrealizedPnl=" + unrealisedPnl +
                 ", realizedPnl=" + realizedPnl +
-                ", tpSlMode='" + tpSlMode + '\'' +
+                ", tpSlMode='" + tpslMode + '\'' +
                 ", positionStatus='" + positionStatus + '\'' +
                 ", bustPrice=" + bustPrice +
                 ", stopLoss=" + stopLoss +
@@ -83,7 +84,7 @@ public class PositionInfo {
                 ", isolatedMargin=" + isolatedMargin +
                 '}');
         return
-                "\nUnrealPn:" + unrealizedPnl +
+                "\nUnrealPn:" + unrealisedPnl +
                 ", realPnl:" + realizedPnl +
                 "\nbustPrice:" + bustPrice +
                 "\nisolatedMargin=" + isolatedMargin  +"potentialLoss:" + getPotentialLoss() + "\nROI" + getRoi() ;

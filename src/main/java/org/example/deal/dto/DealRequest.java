@@ -11,7 +11,7 @@ import java.util.List;
 @Getter
 @Setter
 @NoArgsConstructor
-@JsonIgnoreProperties(ignoreUnknown = true) // Эта аннотация решает задачу
+@JsonIgnoreProperties(ignoreUnknown = true)
 
 // Данные о сделке после парсинга сигнала от пользователя
 

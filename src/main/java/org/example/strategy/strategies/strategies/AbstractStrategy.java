@@ -1,7 +1,6 @@
 package org.example.strategy.strategies.strategies;
 
 import org.example.ai.AiService;
-import org.example.bot.MessageSender;
 import org.example.bybit.BybitManager;
 import org.example.bybit.dto.BybitOrderRequest;
 import org.example.bybit.dto.BybitOrderResponse;
@@ -9,19 +8,18 @@ import org.example.bybit.dto.TickerResponse;
 import org.example.bybit.service.BybitAccountService;
 import org.example.bybit.service.BybitMarketService;
 import org.example.bybit.service.BybitOrderService;
-import org.example.deal.ActiveDealStore;
 import org.example.deal.Deal;
 import org.example.deal.DealCalculator;
 import org.example.deal.DealValidator;
 import org.example.deal.dto.DealRequest;
 import org.example.deal.dto.DealValidationResult;
 import org.example.model.EntryType;
+import org.example.monitor.dto.PositionInfo;
 import org.example.strategy.params.ExitPlan;
 import org.example.model.Direction;
 import org.example.strategy.config.StrategyConfig;
 import org.example.strategy.dto.StrategyContext;
 import org.example.strategy.params.ExitPlanManager;
-import org.example.util.EmojiUtils;
 import org.example.util.LoggerUtils;
 import org.example.strategy.params.PartialExitPlanner;
 import org.example.util.ValuesUtil;
@@ -44,6 +42,11 @@ public abstract class AbstractStrategy implements TradingStrategy {
     protected StrategyConfig createConfig() {
         return new StrategyConfig();
     }
+
+    /**
+     * метод создания сделки,
+     * @param aiService может быть null, если deal создается НЕ из handleGetSignal"
+     */
     @Override
     public Deal createDeal(AiService aiService, String messageText, long chatId, String strategyName) {
         LoggerUtils.logDebug("Создание сделки по сигналу: " + messageText);
@@ -58,6 +61,52 @@ public abstract class AbstractStrategy implements TradingStrategy {
             throw e;
         }
     }
+
+    @Override
+    public Deal createDeal(PositionInfo positionInfo, long chatId, String strategyName) {
+        LoggerUtils.logDebug("Создание сделки по существующей позиции: ");
+        DealRequest request = new DealRequest();
+        Deal deal = null;
+        try {
+            request.setSymbol(positionInfo.getSymbol());
+        } catch (Exception e) {
+            LoggerUtils.logError("❌ Не удалось присвоить тикер для dealRequest. (см совместимость типов в dealRequest) ", e);
+            throw e;
+        }
+        try {
+            request.setDirection(positionInfo.getSide());
+        } catch (Exception e) {
+            LoggerUtils.logError("❌ Не удалось присвоить направление для dealRequest. (см совместимость типов в dealRequest) ", e);
+            throw e;
+        }
+        try {
+            request.setEntryType(EntryType.MARKET);
+            request.setEntryPrice(positionInfo.getAvgPrice());
+            request.setStopLoss(positionInfo.getStopLoss());
+
+        } catch (Exception e) {
+            LoggerUtils.logError("❌ Не удалось присвоить ТВХ, SL или тип входа сделку для dealRequest. (см совместимость типов в dealRequest) ", e);
+            throw e;
+        }
+        try {
+            request.setTakeProfits(new ArrayList<>() {
+            });
+        } catch (Exception e) {
+            LoggerUtils.logError("❌ Не удалось присвоить TP для dealRequest. (см совместимость типов в dealRequest) ", e);
+            throw e;
+        }
+        try {
+            deal = new Deal(request);
+            deal.setChatId(chatId);
+            deal.setStrategyName(strategyName);
+            deal.setPositionInfo(positionInfo);
+            deal.updateDealFromBybitPosition(positionInfo);
+        } catch (Exception e) {
+            LoggerUtils.logError("❌ Не удалось присвоить сделкe dealRequest ", e);
+        }
+        return deal;
+    }
+
     public DealValidationResult validateDeal(Deal deal, BybitMarketService marketService) { return new DealValidator().validate(deal, marketService); }
     public String calculateDeal (Deal deal, DealCalculator dealCalculator) {
         return dealCalculator.calculate(deal);
@@ -95,21 +144,29 @@ public abstract class AbstractStrategy implements TradingStrategy {
         }
     }
     public String goIfDealOpen(Deal deal, BybitManager bybitManager) {
+        return setSL(deal, bybitManager) + "\n" + setTP(deal, bybitManager);
+    }
+
+    public String setSL(Deal deal, BybitManager bybitManager){
         // Устанавливаем стоп-лосс
+        String result;
         try {
             BybitOrderResponse slResponse = bybitManager.getBybitOrderService().setStopLoss(deal);
             String retMsg = slResponse.getRetMsg();
 
             if (!slResponse.isSuccess()) {
-                String message = retMsg != null ? retMsg : "No error message from Bybit";
-                throw new IllegalStateException("❌ Не удалось установить SL: " + message);
+                result = retMsg != null ? retMsg : "No error message from Bybit";
+                throw new IllegalStateException("❌ Не удалось установить SL: " + result);
             }
 
-            LoggerUtils.logInfo("✅ Стоп-лосс установлен для " + deal.getSymbol() + ": " + deal.getStopLoss());
+            result = "✅ Стоп-лосс установлен для " + deal.getSymbol() + ": " + deal.getStopLoss();
+            LoggerUtils.logInfo(result);
         } catch (Exception e) {
             throw new RuntimeException("❌ Ошибка при установке SL для символа " + deal.getSymbol(), e);
         }
-
+        return result;
+    }
+    public String setTP(Deal deal, BybitManager bybitManager) {
         // Устанавливаем TP через ExitPlan
         try {
             deal.setActive(true);
@@ -130,7 +187,6 @@ public abstract class AbstractStrategy implements TradingStrategy {
             throw new RuntimeException("❌ Ошибка при установке TP для символа " + deal.getSymbol(), e);
         }
     }
-
     public ExitPlan planExit(Deal deal) {
         try {
             LoggerUtils.logInfo("🔍 " + getClass().getSimpleName() + ": Начало сделки " + deal.getId());

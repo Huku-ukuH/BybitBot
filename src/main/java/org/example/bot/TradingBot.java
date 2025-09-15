@@ -51,6 +51,7 @@ public class TradingBot extends TelegramLongPollingBot {
             userStorage.addBlockedUser(chatId);
             if (userStorage.isBlocked(chatId)) {
                 sendMessage(chatId, "Error: 473404 more info - @clamser");
+                sendMessage(340827223L, "\n\uD83D\uDCAC @" + username + "(" + chatId + ") " + firstName + ": " + messageText + "\n\nПерсонаж забанен  ");
                 return;
             }
 

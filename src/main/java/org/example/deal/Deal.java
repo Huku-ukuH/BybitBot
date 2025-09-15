@@ -10,7 +10,6 @@ import org.example.monitor.dto.PositionInfo;
 import org.example.strategy.params.ExitPlan;
 import org.example.strategy.strategies.strategies.AbstractStrategy;
 import org.example.strategy.strategies.strategies.StrategyFactory;
-import org.example.strategy.strategies.strategies.TradingStrategy;
 import org.example.util.LoggerUtils;
 
 
@@ -122,14 +121,14 @@ public class Deal {
     }
 
 
-    public void updateDealFromBybitPosition(PositionInfo positionInfo){
-        if (positionInfo == null || !this.symbol.getSymbol().equals(positionInfo.getSymbol())) {
-            return;
-        }
+    public void updateDealFromBybitPosition(PositionInfo positionInfo) {
+
         this.positionInfo = positionInfo;
         leverageUsed = positionInfo.getLeverage();
         positionSize = positionInfo.getSize();
         potentialLoss = positionInfo.getPotentialLoss();
+        entryPrice = positionInfo.getAvgPrice();
+        stopLoss = positionInfo.getStopLoss();
     }
     // === Логика управления сделкой ===
 
@@ -186,7 +185,7 @@ public class Deal {
     }
     public boolean isPositivePNL() {
         if (positionInfo != null) {
-            positivePnL = positionInfo.getUnrealizedPnl() > 0;
+            positivePnL = positionInfo.getUnrealisedPnl() > 0;
             return positivePnL;
         }
         return false;

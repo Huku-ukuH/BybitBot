@@ -4,7 +4,10 @@ import lombok.Getter;
 import lombok.Setter;
 import org.example.ai.AiService;
 import org.example.bybit.BybitManager;
-import org.example.deal.*;
+import org.example.deal.ActiveDealStore;
+import org.example.deal.Deal;
+import org.example.deal.DealCalculator;
+import org.example.deal.UpdateManager;
 import org.example.deal.dto.DealRequest;
 import org.example.deal.dto.DealValidationResult;
 import org.example.model.Direction;
@@ -14,6 +17,7 @@ import org.example.strategy.strategies.strategies.StrategyFactory;
 import org.example.util.EmojiUtils;
 import org.example.util.LoggerUtils;
 
+import java.io.IOException;
 import java.util.Arrays;
 import java.util.List;
 
@@ -53,7 +57,7 @@ public class BotCommandHandler {
             case "/calculate" -> handleCalculate(chatId);
             case "/lossupdate" -> updateLossPrecent(chatId);
             case "/exit" -> handleExit(chatId);
-            case "/update" -> handleUpdate(chatId);
+            case "/update" -> handleUpdateDeals(chatId);
             case "/setstrat" -> handleSetStrategy(chatId, messageText);
             default -> messageSender.send(chatId, EmojiUtils.INFO + " Неизвестная команда: " + command);
         }
@@ -248,29 +252,74 @@ public class BotCommandHandler {
     }
 
 
-    // TODO: продолжать отсюда
-    //метод обновления, а точнее метод восстановления сделок после перезагрузки бота,
+       // todo: ПРОДОЛЖАТЬ ОТСЮДА
+  //метод обновления, а точнее метод восстановления сделок после перезагрузки бота,
     // но пока это просто метод для обновления информации о сделках
-    private void handleUpdate(long chatId) {
-        messageSender.send(chatId, "Обновление сделок из Bybit...");
+    private void handleUpdateDeals(long chatId) {
         // TODO: реализовать обновление сделок из Bybit, а пока будет просто обновление информации о позициях
+        UpdateManager updateManager = new UpdateManager();
+
 
 
         messageSender.send(chatId, "🔄 Обновление сделок из Bybit...");
-        for (Deal deal : activeDealStore.getAllDeals()) {
-            try {
-                PositionInfo pos = bybitManager.getBybitPositionTrackerService().getPosition(deal.getSymbol().getSymbol());
-                if (pos == null) {
-                    // Позиция закрыта вручную
-                    messageSender.send(chatId, "🗑️ Позиция " + deal.getSymbol() + " больше не активна (закрыта на бирже ).");
-                    activeDealStore.removeDeal(deal.getId());
-                } else {
-                    // Обновляем состояние
-                    deal.updateDealFromBybitPosition(pos);
+        try {
+            //получаем список позиций в байбите
+            List<PositionInfo> positionList = bybitManager.getBybitPositionTrackerService().getPositionList();
+            if (positionList.size() != activeDealStore.size()) {
+
+                for (Deal deal : activeDealStore.getAllDeals()) {
+                    PositionInfo pos = bybitManager.getBybitPositionTrackerService().getPosition(positionList, deal.getSymbol().getSymbol());
+                    //обновляем те позиции которые совпадают
+                    updateDeal(deal, chatId, pos);
+                    //удаляем их из списка
+                    positionList.remove(pos);
                 }
-            } catch (Exception e) {
-                LoggerUtils.logError("Ошибка обновления позиции для " + deal.getSymbol(), e);
+
+                //создаем оставшиеся сделки
+                StringBuilder newPositions = new StringBuilder("Позиции обновлены, добавлены новые:\n");
+                for (PositionInfo positionInfo : positionList) {
+                    Deal deal = StrategyFactory.getStrategy("ai").createDeal(positionInfo, chatId, "ai");
+
+                    //создать метод для получения id сделки уже появился в BybitPositionTrackerService ( public static class OrderInfo {)
+
+                    deal.setId("ЗДЕСЬ ДОЛЖЕН БЫТЬ ID СДЕЛКИ");
+                    activeDealStore.addDeal(deal);
+                    newPositions.append(deal).append("\n");
+                }
+                LoggerUtils.logInfo(newPositions.toString());
+                return;
             }
+            for (Deal deal : activeDealStore.getAllDeals()) {
+                updateDeal(deal, chatId, bybitManager.getBybitPositionTrackerService().getPosition(positionList, deal.getSymbol().getSymbol()));
+            }
+        }catch (Exception e) {
+            LoggerUtils.logError("Надо же, ошибка", e);
+        }
+
+
+    }
+
+    /**
+     * Для одиночного обновления позиции
+     * @param positionInfo может быть null, если updateDeal вызван НЕ из handleUpdateDeals"
+     */
+    private void updateDeal(Deal deal, long chatId, PositionInfo positionInfo) {
+        try {
+
+            if (positionInfo == null) {
+                positionInfo = bybitManager.getBybitPositionTrackerService().getPosition(deal.getSymbol().getSymbol());
+            }
+
+            if (positionInfo == null) {
+                // Позиция закрыта вручную
+                messageSender.send(chatId, "🗑️ Позиция " + deal.getSymbol() + " больше не активна (закрыта на бирже ).");
+                activeDealStore.removeDeal(deal.getId());
+            } else {
+                // Обновляем состояние
+                deal.updateDealFromBybitPosition(positionInfo);
+            }
+        } catch (Exception e) {
+            LoggerUtils.logError("Ошибка обновления позиции для " + deal.getSymbol(), e);
         }
     }
 

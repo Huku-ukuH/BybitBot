@@ -11,8 +11,8 @@ public enum Direction {
     public static Direction fromString(String value) {
         if (value == null) return null;
         return switch (value.trim().toUpperCase()) {
-            case "LONG" -> LONG;
-            case "SHORT" -> SHORT;
+            case "LONG", "BUY" -> LONG;
+            case "SHORT", "SELL" -> SHORT;
             default -> throw new IllegalArgumentException("Class Direction, ошибка направления: " + value);
         };
     }
