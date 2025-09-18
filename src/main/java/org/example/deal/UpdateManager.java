@@ -1,10 +1,13 @@
 package org.example.deal;
 
+import lombok.Getter;
 import lombok.RequiredArgsConstructor;
+import org.example.bybit.BybitManager;
 import org.example.bybit.service.BybitPositionTrackerService;
 import org.example.model.EntryType;
 import org.example.monitor.dto.PositionInfo;
 import org.example.strategy.strategies.strategies.StrategyFactory;
+import org.example.util.EmojiUtils;
 import org.example.util.LoggerUtils;
 import org.springframework.stereotype.Component;
 
@@ -19,27 +22,131 @@ import java.util.stream.Collectors;
  * <p>
  * Не взаимодействует с пользователем напрямую — только логирует и возвращает результат.
  */
-@Component
-@RequiredArgsConstructor
-public class UpdateManager {
 
-    private final ActiveDealStore activeDealStore;
-    private final BybitPositionTrackerService positionTrackerService;
+
+public class UpdateManager {
+    @Getter
+    private boolean createDealsProcess = false;
+    private List<PositionInfo> positionListBufer;
 
     /**
      * Основной метод. Синхронизирует сделки в памяти с состоянием на Bybit.
      *
      * @return результат синхронизации: сколько сделок обновлено, создано, удалено
      */
+
+    public String updateDeals(BybitManager bybitManager, ActiveDealStore activeDealStore, long chatId) throws IOException {
+
+        if (createDealsProcess) {
+            createDeal(new StringBuilder(), activeDealStore, chatId);
+        }
+
+        StringBuilder stringBuilder = new StringBuilder("Результат обновления:\n");
+        positionListBufer = bybitManager.getBybitPositionTrackerService().getPositionList();
+
+
+        if (positionListBufer.isEmpty()) {
+            stringBuilder.append("Нет открытых позиций на Bybit");
+            return stringBuilder.toString();
+        }
+
+        try {
+            //получаем список позиций в байбите
+
+            if (positionListBufer.size() != activeDealStore.size()) {
+
+                for (Deal deal : activeDealStore.getAllDeals()) {
+                    PositionInfo pos = bybitManager.getBybitPositionTrackerService().getPosition(positionListBufer, deal.getSymbol().getSymbol());
+                    //обновляем те позиции которые совпадают
+                    stringBuilder.append(updateDeal(chatId, deal, pos, bybitManager, activeDealStore)).append("\n");
+                    //удаляем их из списка
+                    positionListBufer.remove(pos);
+                }
+
+                createDealsProcess = true;
+                //создаем оставшиеся сделки
+                stringBuilder.append("\n").append("Добавляем новые позиции:\n\n");
+                return setStrategyNameToNewDeal(stringBuilder);
+            }
+
+            //Просто обновление по списку
+            for (Deal deal : activeDealStore.getAllDeals()) {
+                PositionInfo pos = bybitManager.getBybitPositionTrackerService().getPosition(positionListBufer, deal.getSymbol().getSymbol());
+                stringBuilder.append(updateDeal(chatId, deal, pos, bybitManager, activeDealStore));
+            }
+
+        }catch (Exception e) {
+            LoggerUtils.logError("Надо же, ошибка", e);
+        }
+
+        return stringBuilder.toString();
+    }
+
+    private String updateDeal(long chatId, Deal deal, PositionInfo positionInfo, BybitManager bybitManager, ActiveDealStore activeDealStore) {
+        try {
+
+            if (positionInfo == null) {
+                LoggerUtils.logWarn("positionInfo была nulll, ищем позицию через лист позиий в BybitPositionTrackerService()");
+                positionInfo = bybitManager.getBybitPositionTrackerService().getPosition(deal.getSymbol().getSymbol());
+            }
+
+            if (positionInfo == null) {
+                // Позиция закрыта вручную
+                messageSender.send(chatId, "🗑️ Позиция " + deal.getSymbol() + " больше не активна (закрыта на бирже ).");
+                activeDealStore.removeDeal(deal.getId());
+            } else {
+                // Обновляем состояние
+                deal.updateDealFromBybitPosition(positionInfo);
+            }
+        } catch (Exception e) {
+            LoggerUtils.logError("Ошибка обновления позиции для " + deal.getSymbol(), e);
+        }
+        return "тут должен быть результат!!!!!"
+    }
+
+    private String setStrategyNameToNewDeal(StringBuilder stringBuilder){
+        stringBuilder.append(EmojiUtils.DEBUG + " Установи стратегию для новой сделки ").append(positionListBufer.get(0).getSymbol().toString());
+        return stringBuilder.toString();
+    }
+
+    private String createDeal(StringBuilder stringBuilder, ActiveDealStore activeDealStore, long chatId) {
+
+        for (PositionInfo positionInfo : positionListBufer) {
+            Deal deal = StrategyFactory.getStrategy("ai").createDeal(positionInfo, chatId, "ai");
+
+            //создать метод для получения id сделки уже появился в BybitPositionTrackerService ( public static class OrderInfo {)
+
+            deal.setId("ЗДЕСЬ ДОЛЖЕН БЫТЬ ID СДЕЛКИ");
+            activeDealStore.addDeal(deal);
+            stringBuilder.append(deal).append("\n");
+        }
+        LoggerUtils.logInfo(stringBuilder.toString());
+
+        if(positionListBufer.isEmpty()) {  //тут важно в BotCommandHandler получать createDealsProcess чтобы избежать ошибок
+            createDealsProcess = false;
+            return stringBuilder.toString();
+        }
+
+        return stringBuilder.toString();
+    }
+
+
+
+
+
+
+    // пока оставить, нужен метод получения ордеров!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+/*
     public SyncResult syncWithExchange() {
         try {
             List<PositionInfo> exchangePositions = positionTrackerService.getPositionList();
             LoggerUtils.logInfo("🔄 Найдено " + exchangePositions.size() + " активных позиций на Bybit");
 
-            SyncResult result = new SyncResult();
 
+            SyncResult result = new SyncResult();
             // 1. Обновляем существующие сделки
-            for (Deal deal : new ArrayList<>(activeDealStore.getAllDeals())) {
+            for (Deal deal : activeDealStore.getAllDeals()) {
                 PositionInfo positionOnExchange = findPosition(exchangePositions, deal.getSymbol().toString());
                 if (positionOnExchange == null) {
                     handleClosedPosition(deal, result);
@@ -164,5 +271,5 @@ public class UpdateManager {
                     ", errors=" + errors +
                     '}';
         }
-    }
+    }*/
 }

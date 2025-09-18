@@ -4,6 +4,7 @@ import lombok.Getter;
 import lombok.Setter;
 import org.example.bot.TradingBot;
 import org.example.bybit.client.BybitWebSocketClient;
+import org.example.deal.UpdateManager;
 import org.example.monitor.PriceMonitor;
 import org.example.strategy.params.StopLossManager;
 import org.example.util.LoggerUtils;
@@ -24,10 +25,10 @@ public class TradingBotApplication {
         try {
             TradingBot tradingBot = new TradingBot();
 
-            StopLossManager stopLossManager = new StopLossManager();
+
             PriceMonitor priceMonitor = new PriceMonitor(
                     tradingBot.getActiveDealStore(),
-                    tradingBot.getMessageSender(), stopLossManager
+                    tradingBot.getMessageSender(), tradingBot.getStopLossManager()
             );
 
             // 🔥 Передаём ссылку на метод, принимающий PriceUpdate

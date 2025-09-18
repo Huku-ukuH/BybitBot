@@ -5,6 +5,8 @@ import lombok.Getter;
 import org.example.ai.AiService;
 import org.example.bybit.BybitManager;
 import org.example.deal.ActiveDealStore;
+import org.example.deal.UpdateManager;
+import org.example.strategy.params.StopLossManager;
 import org.example.util.LoggerUtils;
 import org.telegram.telegrambots.bots.TelegramLongPollingBot;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
@@ -12,12 +14,15 @@ import org.telegram.telegrambots.meta.api.objects.Update;
 import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 @Getter
 public class TradingBot extends TelegramLongPollingBot {
-    private final UserStorage userStorage = new UserStorage();
     private final AiService aiService = new AiService();
+    private final UserStorage userStorage = new UserStorage();
     private final BybitManager bybitManager = new BybitManager();
+    private final UpdateManager updateManager = new UpdateManager();
+    private final StopLossManager stopLossManager = new StopLossManager();
     private final ActiveDealStore activeDealStore = new ActiveDealStore();
     private final MessageSender messageSender = new MessageSender(this);
-    private final BotCommandHandler commandHandler = new BotCommandHandler( bybitManager, aiService, activeDealStore, messageSender);
+    private final BotCommandHandler commandHandler = new BotCommandHandler( bybitManager, aiService, activeDealStore, messageSender, updateManager);
+
 
     public TradingBot() {
         userStorage.addAdminUser(340827223L);

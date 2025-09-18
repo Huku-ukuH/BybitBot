@@ -29,6 +29,7 @@ public class BotCommandHandler {
     private final ActiveDealStore activeDealStore;
     private String strategyName = "ai";
     private boolean waitingSignal = false;
+    private  UpdateManager updateManager;
     private MessageSender messageSender;
     private final AiService aiService;
     private boolean justChat = false;
@@ -37,12 +38,12 @@ public class BotCommandHandler {
     private Deal deal;
     // -----------------
 
-    public BotCommandHandler(BybitManager bybitManager, AiService aiService, ActiveDealStore activeDealStore, MessageSender messageSender) {
-        this.bybitManager = bybitManager;
+    public BotCommandHandler(BybitManager bybitManager, AiService aiService, ActiveDealStore activeDealStore, MessageSender messageSender, UpdateManager updateManager) {
         this.activeDealStore = activeDealStore;
+        this.updateManager = updateManager;
         this.messageSender = messageSender;
+        this.bybitManager = bybitManager;
         this.aiService = aiService;
-
     }
     public void handleCommand(long chatId, String command, String messageText) {
         switch (command.toLowerCase()) {
@@ -257,71 +258,16 @@ public class BotCommandHandler {
     // но пока это просто метод для обновления информации о сделках
     private void handleUpdateDeals(long chatId) {
         // TODO: реализовать обновление сделок из Bybit, а пока будет просто обновление информации о позициях
-        UpdateManager updateManager = new UpdateManager();
 
+        messageSender.send(chatId, "🔄 Обновление сделок из Bybit... Находится в разработке! Предлагаю заняться наладкой реакции на обновление цены от вебсокета" );
 
-
-        messageSender.send(chatId, "🔄 Обновление сделок из Bybit...");
-        try {
-            //получаем список позиций в байбите
-            List<PositionInfo> positionList = bybitManager.getBybitPositionTrackerService().getPositionList();
-            if (positionList.size() != activeDealStore.size()) {
-
-                for (Deal deal : activeDealStore.getAllDeals()) {
-                    PositionInfo pos = bybitManager.getBybitPositionTrackerService().getPosition(positionList, deal.getSymbol().getSymbol());
-                    //обновляем те позиции которые совпадают
-                    updateDeal(deal, chatId, pos);
-                    //удаляем их из списка
-                    positionList.remove(pos);
-                }
-
-                //создаем оставшиеся сделки
-                StringBuilder newPositions = new StringBuilder("Позиции обновлены, добавлены новые:\n");
-                for (PositionInfo positionInfo : positionList) {
-                    Deal deal = StrategyFactory.getStrategy("ai").createDeal(positionInfo, chatId, "ai");
-
-                    //создать метод для получения id сделки уже появился в BybitPositionTrackerService ( public static class OrderInfo {)
-
-                    deal.setId("ЗДЕСЬ ДОЛЖЕН БЫТЬ ID СДЕЛКИ");
-                    activeDealStore.addDeal(deal);
-                    newPositions.append(deal).append("\n");
-                }
-                LoggerUtils.logInfo(newPositions.toString());
-                return;
-            }
-            for (Deal deal : activeDealStore.getAllDeals()) {
-                updateDeal(deal, chatId, bybitManager.getBybitPositionTrackerService().getPosition(positionList, deal.getSymbol().getSymbol()));
-            }
+       /* try {
+            messageSender.send(chatId, updateManager.updateDeals(bybitManager, activeDealStore, chatId));
         }catch (Exception e) {
             LoggerUtils.logError("Надо же, ошибка", e);
-        }
-
-
+        }*/
     }
 
-    /**
-     * Для одиночного обновления позиции
-     * @param positionInfo может быть null, если updateDeal вызван НЕ из handleUpdateDeals"
-     */
-    private void updateDeal(Deal deal, long chatId, PositionInfo positionInfo) {
-        try {
-
-            if (positionInfo == null) {
-                positionInfo = bybitManager.getBybitPositionTrackerService().getPosition(deal.getSymbol().getSymbol());
-            }
-
-            if (positionInfo == null) {
-                // Позиция закрыта вручную
-                messageSender.send(chatId, "🗑️ Позиция " + deal.getSymbol() + " больше не активна (закрыта на бирже ).");
-                activeDealStore.removeDeal(deal.getId());
-            } else {
-                // Обновляем состояние
-                deal.updateDealFromBybitPosition(positionInfo);
-            }
-        } catch (Exception e) {
-            LoggerUtils.logError("Ошибка обновления позиции для " + deal.getSymbol(), e);
-        }
-    }
 
     // --- Вспомогательные методы --- //
     private Deal getActiveDeal(long chatId) {
