@@ -46,6 +46,10 @@ public class BotCommandHandler {
         this.aiService = aiService;
     }
     public void handleCommand(long chatId, String command, String messageText) {
+        if (updateManager.isCreateDealsProcess()) {
+            handleUpdateDeals(chatId, messageText);
+        }
+
         switch (command.toLowerCase()) {
             case "/start", "/help" -> sendHelpMessage(chatId);
             case "/getsgnl" -> handleGetSignal(chatId, messageText);
@@ -58,7 +62,7 @@ public class BotCommandHandler {
             case "/calculate" -> handleCalculate(chatId);
             case "/lossupdate" -> updateLossPrecent(chatId);
             case "/exit" -> handleExit(chatId);
-            case "/update" -> handleUpdateDeals(chatId);
+            case "/update" -> handleUpdateDeals(chatId, "defaultValue");
             case "/setstrat" -> handleSetStrategy(chatId, messageText);
             default -> messageSender.send(chatId, EmojiUtils.INFO + " Неизвестная команда: " + command);
         }
@@ -256,17 +260,27 @@ public class BotCommandHandler {
        // todo: ПРОДОЛЖАТЬ ОТСЮДА
   //метод обновления, а точнее метод восстановления сделок после перезагрузки бота,
     // но пока это просто метод для обновления информации о сделках
-    private void handleUpdateDeals(long chatId) {
-        // TODO: реализовать обновление сделок из Bybit, а пока будет просто обновление информации о позициях
+       private void handleUpdateDeals(long chatId, String strategyName) {
+           messageSender.send(chatId, "🔄 Обновление сделок из Bybit... Находится в разработке! Предлагаю заняться наладкой реакции на обновление цены от вебсокета");
 
-        messageSender.send(chatId, "🔄 Обновление сделок из Bybit... Находится в разработке! Предлагаю заняться наладкой реакции на обновление цены от вебсокета" );
+           try {
+               String updateResult = updateManager.updateDeals(bybitManager, activeDealStore, chatId, strategyName);
 
-       /* try {
-            messageSender.send(chatId, updateManager.updateDeals(bybitManager, activeDealStore, chatId));
-        }catch (Exception e) {
-            LoggerUtils.logError("Надо же, ошибка", e);
-        }*/
-    }
+               if (updateManager.isCreateDealsProcess()) {
+                   List<String> strategyButtons = Arrays.asList(StrategyFactory.getAvailableStrategies().toArray(new String[0]));
+                   // ✅ Отправляем сообщение С КЛАВИАТУРОЙ
+                   messageSender.sendWithButtons(chatId, updateResult, strategyButtons);
+                   return;
+               }
+
+               // ✅ Отправляем сообщение и ОЧИЩАЕМ клавиатуру (на случай, если она была)
+               messageSender.sendAndClearButtons(chatId, updateResult);
+
+           } catch (Exception e) {
+               LoggerUtils.logError("Надо же, ошибка", e);
+               messageSender.sendError(chatId, "Произошла ошибка при обновлении", e, "handleUpdateDeals");
+           }
+       }
 
 
     // --- Вспомогательные методы --- //

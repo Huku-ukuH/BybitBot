@@ -7,6 +7,7 @@ import org.example.bybit.BybitManager;
 import org.example.deal.ActiveDealStore;
 import org.example.deal.UpdateManager;
 import org.example.strategy.params.StopLossManager;
+import org.example.strategy.strategies.strategies.StrategyFactory;
 import org.example.util.LoggerUtils;
 import org.telegram.telegrambots.bots.TelegramLongPollingBot;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
@@ -75,7 +76,7 @@ public class TradingBot extends TelegramLongPollingBot {
                     messageText = "/getsgnl " + messageText;
                 }
 
-                if (messageText.startsWith("/")) {
+                if (messageText.startsWith("/")||StrategyFactory.isStrategyAvailable(messageText)) {
                     String[] parts = messageText.split(" ", 2);
                     String command = parts[0];
                     String args = parts.length > 1 ? parts[1] : "";

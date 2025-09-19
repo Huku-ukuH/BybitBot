@@ -35,10 +35,10 @@ public class UpdateManager {
      * @return результат синхронизации: сколько сделок обновлено, создано, удалено
      */
 
-    public String updateDeals(BybitManager bybitManager, ActiveDealStore activeDealStore, long chatId) throws IOException {
+    public String updateDeals(BybitManager bybitManager, ActiveDealStore activeDealStore, long chatId, String strategyName) throws IOException {
 
         if (createDealsProcess) {
-            createDeal(new StringBuilder(), activeDealStore, chatId);
+            createDeal(new StringBuilder(), activeDealStore, chatId, strategyName);
         }
 
         StringBuilder stringBuilder = new StringBuilder("Результат обновления:\n");
@@ -58,7 +58,7 @@ public class UpdateManager {
                 for (Deal deal : activeDealStore.getAllDeals()) {
                     PositionInfo pos = bybitManager.getBybitPositionTrackerService().getPosition(positionListBufer, deal.getSymbol().getSymbol());
                     //обновляем те позиции которые совпадают
-                    stringBuilder.append(updateDeal(chatId, deal, pos, bybitManager, activeDealStore)).append("\n");
+                    stringBuilder.append(updateDeal(deal, pos, activeDealStore)).append("\n");
                     //удаляем их из списка
                     positionListBufer.remove(pos);
                 }
@@ -72,7 +72,7 @@ public class UpdateManager {
             //Просто обновление по списку
             for (Deal deal : activeDealStore.getAllDeals()) {
                 PositionInfo pos = bybitManager.getBybitPositionTrackerService().getPosition(positionListBufer, deal.getSymbol().getSymbol());
-                stringBuilder.append(updateDeal(chatId, deal, pos, bybitManager, activeDealStore));
+                stringBuilder.append(updateDeal(deal, pos, activeDealStore));
             }
 
         }catch (Exception e) {
@@ -82,26 +82,24 @@ public class UpdateManager {
         return stringBuilder.toString();
     }
 
-    private String updateDeal(long chatId, Deal deal, PositionInfo positionInfo, BybitManager bybitManager, ActiveDealStore activeDealStore) {
+    private String updateDeal(Deal deal, PositionInfo positionInfo, ActiveDealStore activeDealStore) {
+        String updateResultString = null;
         try {
 
-            if (positionInfo == null) {
-                LoggerUtils.logWarn("positionInfo была nulll, ищем позицию через лист позиий в BybitPositionTrackerService()");
-                positionInfo = bybitManager.getBybitPositionTrackerService().getPosition(deal.getSymbol().getSymbol());
+            if (positionInfo != null) {
+                deal.updateDealFromBybitPosition(positionInfo);
+                updateResultString = deal.getSymbol().toString() + "- Сделка обновлена!";
+                return updateResultString;
             }
 
-            if (positionInfo == null) {
-                // Позиция закрыта вручную
-                messageSender.send(chatId, "🗑️ Позиция " + deal.getSymbol() + " больше не активна (закрыта на бирже ).");
-                activeDealStore.removeDeal(deal.getId());
-            } else {
-                // Обновляем состояние
-                deal.updateDealFromBybitPosition(positionInfo);
-            }
+            // Позиция закрыта вручную
+            updateResultString = "🗑️ Позиция " + deal.getSymbol() + " больше не активна (закрыта на бирже ).";
+            activeDealStore.removeDeal(deal.getId());
+
         } catch (Exception e) {
             LoggerUtils.logError("Ошибка обновления позиции для " + deal.getSymbol(), e);
         }
-        return "тут должен быть результат!!!!!"
+        return updateResultString;
     }
 
     private String setStrategyNameToNewDeal(StringBuilder stringBuilder){
@@ -109,10 +107,10 @@ public class UpdateManager {
         return stringBuilder.toString();
     }
 
-    private String createDeal(StringBuilder stringBuilder, ActiveDealStore activeDealStore, long chatId) {
+    private String createDeal(StringBuilder stringBuilder, ActiveDealStore activeDealStore, long chatId, String strategyName) {
 
         for (PositionInfo positionInfo : positionListBufer) {
-            Deal deal = StrategyFactory.getStrategy("ai").createDeal(positionInfo, chatId, "ai");
+            Deal deal = StrategyFactory.getStrategy("ai").createDeal(positionInfo, chatId, strategyName);
 
             //создать метод для получения id сделки уже появился в BybitPositionTrackerService ( public static class OrderInfo {)
 

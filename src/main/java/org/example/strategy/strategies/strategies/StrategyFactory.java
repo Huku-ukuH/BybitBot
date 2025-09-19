@@ -7,7 +7,7 @@ import java.util.List;
 //Фабрика для создания экземпляров торговых стратегий.
 public class StrategyFactory {
 
-    private static final List<String> AVAILABLE_STRATEGIES = List.of("ai", "martingale");
+    private static final List<String> AVAILABLE_STRATEGIES = List.of("ai"); // добавить имя сюда
 
 
     //Получает экземпляр стратегии по её имени.

@@ -122,13 +122,33 @@ public class Deal {
 
 
     public void updateDealFromBybitPosition(PositionInfo positionInfo) {
+        if (positionInfo == null) {
+            LoggerUtils.logInfo("Attempt to update deal with null PositionInfo");
+            return;
+        }
+
+        // Сохраняем старые значения для лога
+        double oldLeverage = this.leverageUsed;
+        double oldPositionSize = this.positionSize;
+        double oldPotentialLoss = this.potentialLoss;
+        double oldEntryPrice = this.entryPrice;
+        double oldStopLoss = this.stopLoss;
 
         this.positionInfo = positionInfo;
-        leverageUsed = positionInfo.getLeverage();
-        positionSize = positionInfo.getSize();
-        potentialLoss = positionInfo.getPotentialLoss();
-        entryPrice = positionInfo.getAvgPrice();
-        stopLoss = positionInfo.getStopLoss();
+        this.leverageUsed = positionInfo.getLeverage();
+        this.positionSize = positionInfo.getSize();
+        this.potentialLoss = positionInfo.getPotentialLoss();
+        this.entryPrice = positionInfo.getAvgPrice();
+        this.stopLoss = positionInfo.getStopLoss();
+
+        LoggerUtils.logInfo(
+                "Deal updated from Bybit position:\n" +
+                        "Leverage: " + oldLeverage + " → " + this.leverageUsed + "\n" +
+                        "Position Size: " + oldPositionSize + " → " + this.positionSize + "\n" +
+                        "Potential Loss: " + oldPotentialLoss + " → " + this.potentialLoss + "\n" +
+                        "Entry Price: " + oldEntryPrice + " → " + this.entryPrice + "\n" +
+                        "Stop Loss: " + oldStopLoss + " → " + this.stopLoss
+        );
     }
     // === Логика управления сделкой ===
 
