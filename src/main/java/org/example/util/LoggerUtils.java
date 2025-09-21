@@ -1,58 +1,51 @@
 package org.example.util;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 public class LoggerUtils {
-    private LoggerUtils() {
+
+    private static final String BASE_PACKAGE = "org.example";
+
+    private LoggerUtils() {}
+
+    public static Logger getLogger(Class<?> clazz) {
+        return LoggerFactory.getLogger(clazz);
     }
 
-        // Получить логгер для любого класса
-        public static Logger getLogger(Class<?> clazz) {
-            return LoggerFactory.getLogger(clazz);
-        }
-
-        public static void logInfo(String message) {
-            getLogger(getCallerClass()).info("\n" + EmojiUtils.ZOOM + message + "\n");
-        }
-
-        public static void logDebug(String message) {
-            getLogger(getCallerClass()).debug("\n" + EmojiUtils.DEBUG + message + "\n");
-        }
-
-        public static void logWarn(String message) {
-            getLogger(getCallerClass()).warn("\n" + EmojiUtils.WARN + message + "\n");
-        }
-
-        public static void logError(String message, Throwable throwable) {
-            getLogger(getCallerClass()).error("\n" + EmojiUtils.ERROR + message + "\n" + EmojiUtils.INFO, throwable + "\n");
-        }
-
-        private static Class<?> getCallerClass() {
-            StackTraceElement[] stackTrace = Thread.currentThread().getStackTrace();
-            for (StackTraceElement element : stackTrace) {
-                String className = element.getClassName();
-
-                // Пропускаем системные, логирующие и служебные пакеты
-                if (className.startsWith("java.") ||
-                        className.startsWith("javax.") ||
-                        className.startsWith("sun.") ||
-                        className.startsWith("org.slf4j.") ||
-                        className.equals(LoggerUtils.class.getName())) {
-                    continue;
-                }
-
-                // Теперь фильтруем по твоему базовому пакету
-                if (className.startsWith("org.example")) {
-                    try {
-                        return Class.forName(className);
-                    } catch (ClassNotFoundException e) {
-                        // просто игнорируем
-                    }
-                }
+    // Автоматически определяет класс, вызвавший логгер
+    private static Logger getCurrentLogger() {
+        StackTraceElement[] stack = Thread.currentThread().getStackTrace();
+        for (int i = 2; i < stack.length; i++) { // начинаем с 2, чтобы пропустить getStackTrace и getCurrentLogger
+            String className = stack[i].getClassName();
+            if (!className.equals(LoggerUtils.class.getName()) &&
+                    className.startsWith(BASE_PACKAGE)) {
+                try {
+                    return LoggerFactory.getLogger(Class.forName(className));
+                } catch (ClassNotFoundException ignored) {}
             }
-
-            return LoggerUtils.class;
         }
+        return LoggerFactory.getLogger(LoggerUtils.class);
+    }
 
+    public static void info(String message) {
+        getCurrentLogger().info("{} {}", EmojiUtils.ZOOM, message);
+    }
+
+    public static void debug(String message) {
+        getCurrentLogger().debug("{} {}", EmojiUtils.DEBUG, message);
+    }
+
+    public static void warn(String message) {
+        getCurrentLogger().warn("{} {}", EmojiUtils.WARN, message);
+    }
+
+    public static void error(String message, Throwable throwable) {
+        getCurrentLogger().error("{} {}{}", EmojiUtils.ERROR, message,
+                "", throwable);
+    }
+
+    public static void error(String message) {
+        getCurrentLogger().error("{} {}", EmojiUtils.ERROR, message);
+    }
 }
-

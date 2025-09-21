@@ -77,7 +77,7 @@ public class StrategyConfig {
                 ", maxLossInPosition=" + maxLossPrecen +
                 ", leverageTrails=" + Arrays.toString(leverageTrails) +
                 ", warningDistancePercent=" + warningDistancePercent +
-                ", exitRules=" + tpExitRules +
+                ", exitRules=" + tpExitRules.toString() +
                 ", pnlExitRules=" + pnlTpExitRules +
                 '}';
     }

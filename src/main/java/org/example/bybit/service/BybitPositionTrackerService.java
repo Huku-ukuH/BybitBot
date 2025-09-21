@@ -78,97 +78,49 @@ public class BybitPositionTrackerService {
             throw new IOException("Не удалось получить список позиций", e);
         }
     }
-/*    public List<PositionInfo> getPositionList() throws IOException {
-        try {
-            Map<String, String> params = Map.of(
-                    "category", "linear",
-                    "settleCoin", "USDT"
-                    // Можно добавить фильтры при необходимости
-            );
-
-            String response = httpClient.signedGet("/v5/position/list", params, String.class);
-            Map<String, Object> root = JsonUtils.fromJson(response, Map.class);
-
-            if (!"0".equals(root.get("retCode"))) {
-                String errorMsg = (String) root.get("retMsg");
-                LoggerUtils.logWarn("Bybit вернул ошибку в /v5/position/list: " + errorMsg);
-                return Collections.emptyList();
-            }
-
-            Map<String, Object> result = (Map<String, Object>) root.get("result");
-            if (result == null) {
-                return Collections.emptyList();
-            }
-
-            @SuppressWarnings("unchecked")
-            List<Map<String, Object>> list = (List<Map<String, Object>>) result.get("list");
-            if (list == null || list.isEmpty()) {
-                return Collections.emptyList();
-            }
-
-            // Конвертируем каждый элемент в PositionInfo
-            return list.stream()
-                    .map(item -> {
-                        try {
-                            String json = JsonUtils.toJson(item);
-                            return JsonUtils.fromJson(json, PositionInfo.class);
-                        } catch (Exception e) {
-                            LoggerUtils.logError("Ошибка конвертации позиции из JSON: " + item, e);
-                            return null;
-                        }
-                    })
-                    .filter(Objects::nonNull)
-                    .collect(Collectors.toList());
-
-        } catch (Exception e) {
-            LoggerUtils.logError("Ошибка при получении списка позиций", e);
-            throw new IOException("Не удалось получить список позиций", e);
-        }
-    }*/
-
-    /**
-     * Получает позицию по конкретному символу.
-     *
-     * @param symbol символ, например "BTCUSDT"
-     * @return позиция или null, если не найдена
-     * @throws IOException при ошибках сети или парсинга
-     */
-    public PositionInfo getPosition(String symbol) throws IOException {
-        List<PositionInfo> positions = getPositionList();
-        return positions.stream()
-                .filter(p -> symbol.equals(p.getSymbol()))
-                .findFirst()
-                .orElse(null);
-    }
-    public PositionInfo getPosition(List<PositionInfo> positions, String symbol) {
-        if (positions == null || symbol == null) {
-            return null;
-        }
-
-        return positions.stream()
-                .filter(p -> symbol.equals(p.getSymbol()))  // безопасно при p.getSymbol() == null
-                .findFirst()
-                .orElse(null);
-    }
 
 
     //класс для получения ордеров, для создания новых сделок
 
+    /**
+     * DTO для ордера с Bybit API. Включает все поля, необходимые для восстановления TP/SL.
+     */
     @Getter
     @Setter
     @JsonIgnoreProperties(ignoreUnknown = true)
     public static class OrderInfo {
         @JsonProperty("orderId")
         private String orderId;
+
         @JsonProperty("symbol")
         private String symbol;
+
         @JsonProperty("side")
         private String side;
+
         @JsonProperty("qty")
         private String qty;
-        @JsonProperty("price")
-        private String price;
 
+        @JsonProperty("price")
+        private String price; // для лимитных ордеров
+
+        @JsonProperty("orderType")
+        private String orderType; // "Market", "Limit"
+
+        @JsonProperty("reduceOnly")
+        private Boolean reduceOnly; // true для TP/SL
+
+        @JsonProperty("stopOrderType")
+        private String stopOrderType; // "StopLoss", "TakeProfit", "PartialTakeProfit"
+
+        @JsonProperty("triggerPrice")
+        private String triggerPrice; // цена активации (триггер)
+
+        @JsonProperty("tpslMode")
+        private String tpslMode; // "Full", "Partial"
+
+        @JsonProperty("orderStatus")
+        private String orderStatus; // "New", "Untriggered", "Triggered"
 
         @Override
         public String toString() {
@@ -178,87 +130,57 @@ public class BybitPositionTrackerService {
                     ", side='" + side + '\'' +
                     ", qty='" + qty + '\'' +
                     ", price='" + price + '\'' +
+                    ", orderType='" + orderType + '\'' +
+                    ", reduceOnly=" + reduceOnly +
+                    ", stopOrderType='" + stopOrderType + '\'' +
+                    ", triggerPrice='" + triggerPrice + '\'' +
+                    ", tpslMode='" + tpslMode + '\'' +
+                    ", orderStatus='" + orderStatus + '\'' +
                     '}';
         }
     }
 
     /**
-     * Получает список активных/недавних ордеров и возвращает их ID.
-     * Можно фильтровать по символу и orderLinkId.
+     * Получает список активных ордеров по символу.
+     * <p>
+     * Важно: использует {@code stopOrderType} и {@code triggerPrice}, а не {@code orderType}.
      *
-     * @param symbol      Торговая пара, например "BTCUSDT"
+     * @param symbol Торговая пара, например "ETHUSDT"
      * @return Список объектов OrderInfo (включая orderId)
      * @throws IOException при ошибках сети или парсинга
      */
-/*    public List<OrderInfo> getOrders(String symbol) throws IOException {
-        try {
-            Map<String, String> params = new HashMap<>();
-            params.put("category", "linear");
-            params.put("symbol", symbol);
-
-            String response = httpClient.signedGet("/v5/order/realtime", params, String.class);
-            Map<String, Object> root = JsonUtils.fromJson(response, Map.class);
-
-            if (!"0".equals(root.get("retCode"))) {
-                String errorMsg = (String) root.get("retMsg");
-                LoggerUtils.logWarn("Bybit вернул ошибку в /v5/order/realtime: " + errorMsg);
-                return Collections.emptyList();
-            }
-
-            Map<String, Object> result = (Map<String, Object>) root.get("result");
-            if (result == null) {
-                return Collections.emptyList();
-            }
-
-            @SuppressWarnings("unchecked")
-            List<Map<String, Object>> list = (List<Map<String, Object>>) result.get("list");
-            if (list == null || list.isEmpty()) {
-                return Collections.emptyList();
-            }
-
-            return list.stream()
-                    .map(item -> {
-                        try {
-                            String json = JsonUtils.toJson(item);
-                            return JsonUtils.fromJson(json, OrderInfo.class);
-                        } catch (Exception e) {
-                            LoggerUtils.logError("Ошибка конвертации ордера из JSON: " + item, e);
-                            return null;
-                        }
-                    })
-                    .filter(Objects::nonNull)
-                    .collect(Collectors.toList());
-
-        } catch (Exception e) {
-            LoggerUtils.logError("Ошибка при получении списка ордеров", e);
-            throw new IOException("Не удалось получить список ордеров", e);
-        }
-    }*/
-
     public List<OrderInfo> getOrders(String symbol) throws IOException {
         try {
             Map<String, String> params = new HashMap<>();
             params.put("category", "linear");
             params.put("symbol", symbol);
 
-            // ✅ Аналогично — получаем как Object
+            // Получаем ответ как Object → сериализуем в JSON строку → парсим в Map
             Object rawResponse = httpClient.signedGet("/v5/order/realtime", params, Object.class);
             String jsonString = JsonUtils.toJson(rawResponse);
             Map<String, Object> root = JsonUtils.fromJson(jsonString, Map.class);
 
-            if (!"0".equals(root.get("retCode"))) {
-                String errorMsg = (String) root.get("retMsg");
+            // Проверяем retCode как Integer
+            if (!Integer.valueOf(0).equals(root.get("retCode"))) {
+                String errorMsg = (String) root.getOrDefault("retMsg", "Unknown error");
                 LoggerUtils.logWarn("Bybit вернул ошибку в /v5/order/realtime: " + errorMsg);
                 return Collections.emptyList();
             }
 
             Map<String, Object> result = (Map<String, Object>) root.get("result");
-            if (result == null) return Collections.emptyList();
+            if (result == null) {
+                LoggerUtils.logDebug("Ответ от /v5/order/realtime: 'result' is null");
+                return Collections.emptyList();
+            }
 
             @SuppressWarnings("unchecked")
             List<Map<String, Object>> list = (List<Map<String, Object>>) result.get("list");
-            if (list == null || list.isEmpty()) return Collections.emptyList();
+            if (list == null || list.isEmpty()) {
+                LoggerUtils.logDebug("Список ордеров пуст для символа: " + symbol);
+                return Collections.emptyList();
+            }
 
+            // Конвертируем каждый элемент в OrderInfo
             return list.stream()
                     .map(item -> {
                         try {
@@ -273,17 +195,8 @@ public class BybitPositionTrackerService {
                     .collect(Collectors.toList());
 
         } catch (Exception e) {
-            LoggerUtils.logError("Ошибка при получении списка ордеров", e);
+            LoggerUtils.logError("Ошибка при получении списка ордеров для символа " + symbol, e);
             throw new IOException("Не удалось получить список ордеров", e);
         }
-    }
-
-    /**
-     * Удобный метод: получить только список ID ордеров
-     */
-    public List<String> getOrderIds(String symbol) throws IOException {
-        return getOrders(symbol).stream()
-                .map(OrderInfo::getOrderId)
-                .collect(Collectors.toList());
     }
 }

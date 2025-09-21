@@ -11,8 +11,8 @@ import org.example.strategy.config.StrategyConfig;
 import org.example.strategy.dto.StrategyContext;
 import org.example.strategy.params.ExitPlan;
 
-public class MartingaleStrategy extends AbstractStrategy {
-    public MartingaleStrategy() {
+public class FreeStrategy extends AbstractStrategy {
+    public FreeStrategy() {
         super();
     }
 

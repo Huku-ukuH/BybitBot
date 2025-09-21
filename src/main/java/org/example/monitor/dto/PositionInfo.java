@@ -66,27 +66,29 @@ public class PositionInfo {
 
     @Override
     public String toString() {
-        LoggerUtils.logInfo("ПОЛНАЯ ИНФОРМАЦИЯ О ПОЗИЦИИ С БАЙБИТ \nPositionInfo{" +
-                "symbol='" + symbol + '\'' +
-                ", side='" + side + '\'' +
-                ", size=" + size +
-                ", entryPrice=" + avgPrice +
-                ", leverage=" + leverage +
-                ", positionValue=" + positionValue +
-                ", unrealizedPnl=" + unrealisedPnl +
-                ", realizedPnl=" + realizedPnl +
-                ", tpSlMode='" + tpslMode + '\'' +
-                ", positionStatus='" + positionStatus + '\'' +
-                ", bustPrice=" + bustPrice +
-                ", stopLoss=" + stopLoss +
-                ", takeProfit=" + takeProfit +
-                ", trailingStop=" + trailingStop +
-                ", isolatedMargin=" + isolatedMargin +
-                '}');
-        return
-                "\nUnrealPn:" + unrealisedPnl +
-                ", realPnl:" + realizedPnl +
+//        LoggerUtils.logInfo("ПОЛНАЯ ИНФОРМАЦИЯ О ПОЗИЦИИ С БАЙБИТ \nPositionInfo{" +
+//                "symbol='" + symbol + '\'' +
+//                ", side='" + side + '\'' +
+//                ", size=" + size +
+//                ", entryPrice=" + avgPrice +
+//                ", leverage=" + leverage +
+//                ", positionValue=" + positionValue +
+//                ", unrealizedPnl=" + unrealisedPnl +
+//                ", realizedPnl=" + realizedPnl +
+//                ", tpSlMode='" + tpslMode + '\'' +
+//                ", positionStatus='" + positionStatus + '\'' +
+//                ", bustPrice=" + bustPrice +
+//                ", stopLoss=" + stopLoss +
+//                ", takeProfit=" + takeProfit +
+//                ", trailingStop=" + trailingStop +
+//                ", isolatedMargin=" + isolatedMargin +
+//                '}');
+
+         return "\nUnrealisedPnl = " + unrealisedPnl +
+                "\nrealisedPnl = " + realizedPnl +
                 "\nbustPrice:" + bustPrice +
-                "\nisolatedMargin=" + isolatedMargin  +"potentialLoss:" + getPotentialLoss() + "\nROI" + getRoi() ;
+                "\nisolatedMargin=" + isolatedMargin  +
+                "\npotentialLoss:" + getPotentialLoss() +
+                 "\nROI" + getRoi() ;
     }
 }

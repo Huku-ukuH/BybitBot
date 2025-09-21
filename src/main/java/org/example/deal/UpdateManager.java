@@ -1,19 +1,17 @@
 package org.example.deal;
 
 import lombok.Getter;
-import lombok.RequiredArgsConstructor;
 import org.example.bybit.BybitManager;
 import org.example.bybit.service.BybitPositionTrackerService;
-import org.example.model.EntryType;
 import org.example.monitor.dto.PositionInfo;
 import org.example.strategy.strategies.strategies.StrategyFactory;
 import org.example.util.EmojiUtils;
+import org.example.util.JsonUtils;
 import org.example.util.LoggerUtils;
-import org.springframework.stereotype.Component;
 
 import java.io.IOException;
 import java.util.*;
-import java.util.stream.Collectors;
+
 
 /**
  * Сервис для синхронизации состояния сделок в приложении с данными на бирже Bybit.
@@ -22,252 +20,174 @@ import java.util.stream.Collectors;
  * <p>
  * Не взаимодействует с пользователем напрямую — только логирует и возвращает результат.
  */
-
-
 public class UpdateManager {
     @Getter
     private boolean createDealsProcess = false;
-    private List<PositionInfo> positionListBufer;
+
+    // Для временного хранения новых позиций во время восстановления
+    private List<PositionInfo> pendingNewPositions = new ArrayList<>();
+    private int currentRestoreIndex = 0;
 
     /**
-     * Основной метод. Синхронизирует сделки в памяти с состоянием на Bybit.
-     *
-     * @return результат синхронизации: сколько сделок обновлено, создано, удалено
+     * Основной метод обновления и восстановления сделок.
      */
-
-    public String updateDeals(BybitManager bybitManager, ActiveDealStore activeDealStore, long chatId, String strategyName) throws IOException {
-
+    public String updateDeals(BybitManager bybitManager, ActiveDealStore activeDealStore, long chatId, String strategyNameInput) throws IOException {
+        // ШАГ 1: Если идёт процесс восстановления — передаём управление
         if (createDealsProcess) {
-            createDeal(new StringBuilder(), activeDealStore, chatId, strategyName);
+            return createNextDeal(strategyNameInput, activeDealStore, chatId, bybitManager);
         }
 
-        StringBuilder stringBuilder = new StringBuilder("Результат обновления:\n");
-        positionListBufer = bybitManager.getBybitPositionTrackerService().getPositionList();
+        StringBuilder result = new StringBuilder("🔄 Результат обновления:\n");
+        List<PositionInfo> exchangePositions = bybitManager.getBybitPositionTrackerService().getPositionList();
 
-
-        if (positionListBufer.isEmpty()) {
-            stringBuilder.append("Нет открытых позиций на Bybit");
-            return stringBuilder.toString();
+        if (exchangePositions.isEmpty()) {
+            result.append("✅ Нет открытых позиций на Bybit.");
+            return result.toString();
         }
 
-        try {
-            //получаем список позиций в байбите
+        // ШАГ 2: Обновляем существующие сделки
+        List<PositionInfo> newPositions = new ArrayList<>(exchangePositions); // копия для удаления
 
-            if (positionListBufer.size() != activeDealStore.size()) {
+        for (Deal deal : activeDealStore.getAllDeals()) {
+            PositionInfo posOnExchange = findPosition(exchangePositions, deal.getSymbol().getSymbol());
 
-                for (Deal deal : activeDealStore.getAllDeals()) {
-                    PositionInfo pos = bybitManager.getBybitPositionTrackerService().getPosition(positionListBufer, deal.getSymbol().getSymbol());
-                    //обновляем те позиции которые совпадают
-                    stringBuilder.append(updateDeal(deal, pos, activeDealStore)).append("\n");
-                    //удаляем их из списка
-                    positionListBufer.remove(pos);
-                }
-
-                createDealsProcess = true;
-                //создаем оставшиеся сделки
-                stringBuilder.append("\n").append("Добавляем новые позиции:\n\n");
-                return setStrategyNameToNewDeal(stringBuilder);
+            if (posOnExchange == null) {
+                // Сделка закрыта
+                result.append("🗑️ ").append(deal.getSymbol()).append(" — закрыта, удалена.\n");
+                activeDealStore.removeDeal(deal.getId());
+            } else {
+                deal.updateDealFromBybitPosition(posOnExchange);
+                result.append(restoreOrderIds(deal, posOnExchange.getSymbol().toString(), bybitManager));
+                result.append("✅ ").append(deal.getSymbol()).append(" — обновлена.\n");
+                newPositions.remove(posOnExchange); // убираем из списка "новых"
             }
-
-            //Просто обновление по списку
-            for (Deal deal : activeDealStore.getAllDeals()) {
-                PositionInfo pos = bybitManager.getBybitPositionTrackerService().getPosition(positionListBufer, deal.getSymbol().getSymbol());
-                stringBuilder.append(updateDeal(deal, pos, activeDealStore));
-            }
-
-        }catch (Exception e) {
-            LoggerUtils.logError("Надо же, ошибка", e);
         }
 
-        return stringBuilder.toString();
+        // ШАГ 3: Есть ли новые позиции?
+        if (!newPositions.isEmpty()) {
+            this.pendingNewPositions = new ArrayList<>(newPositions);
+            this.currentRestoreIndex = 0;
+            this.createDealsProcess = true;
+
+            PositionInfo first = pendingNewPositions.get(0);
+            result.append("\n🆕 Найдена новая позиция: ").append(first.getSymbol())
+                    .append(". Укажите стратегию:");
+        } else {
+            result.append("\n✅ Все сделки синхронизированы.");
+        }
+
+        return result.toString();
     }
 
-    private String updateDeal(Deal deal, PositionInfo positionInfo, ActiveDealStore activeDealStore) {
-        String updateResultString = null;
-        try {
-
-            if (positionInfo != null) {
-                deal.updateDealFromBybitPosition(positionInfo);
-                updateResultString = deal.getSymbol().toString() + "- Сделка обновлена!";
-                return updateResultString;
-            }
-
-            // Позиция закрыта вручную
-            updateResultString = "🗑️ Позиция " + deal.getSymbol() + " больше не активна (закрыта на бирже ).";
-            activeDealStore.removeDeal(deal.getId());
-
-        } catch (Exception e) {
-            LoggerUtils.logError("Ошибка обновления позиции для " + deal.getSymbol(), e);
-        }
-        return updateResultString;
-    }
-
-    private String setStrategyNameToNewDeal(StringBuilder stringBuilder){
-        stringBuilder.append(EmojiUtils.DEBUG + " Установи стратегию для новой сделки ").append(positionListBufer.get(0).getSymbol().toString());
-        return stringBuilder.toString();
-    }
-
-    private String createDeal(StringBuilder stringBuilder, ActiveDealStore activeDealStore, long chatId, String strategyName) {
-
-        for (PositionInfo positionInfo : positionListBufer) {
-            Deal deal = StrategyFactory.getStrategy("ai").createDeal(positionInfo, chatId, strategyName);
-
-            //создать метод для получения id сделки уже появился в BybitPositionTrackerService ( public static class OrderInfo {)
-
-            deal.setId("ЗДЕСЬ ДОЛЖЕН БЫТЬ ID СДЕЛКИ");
-            activeDealStore.addDeal(deal);
-            stringBuilder.append(deal).append("\n");
-        }
-        LoggerUtils.logInfo(stringBuilder.toString());
-
-        if(positionListBufer.isEmpty()) {  //тут важно в BotCommandHandler получать createDealsProcess чтобы избежать ошибок
+    /**
+     * Создаёт одну сделку после ввода стратегии пользователем.
+     */
+    private String createNextDeal(String strategyName, ActiveDealStore activeDealStore, long chatId, BybitManager bybitManager) {
+        if (currentRestoreIndex >= pendingNewPositions.size()) {
             createDealsProcess = false;
-            return stringBuilder.toString();
+            return "❌ Нет сделок для восстановления.";
         }
 
-        return stringBuilder.toString();
-    }
+        PositionInfo pos = pendingNewPositions.get(currentRestoreIndex);
+        currentRestoreIndex++;
 
+        // Проверяем стратегию
+        if (!StrategyFactory.isStrategyAvailable(strategyName)) {
+            currentRestoreIndex--; // вернём индекс назад
+            return "⚠️ Стратегия '" + strategyName + "' не найдена. Доступные: " +
+                    String.join(", ", StrategyFactory.getAvailableStrategies());
+        }
 
-
-
-
-
-    // пока оставить, нужен метод получения ордеров!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-
-/*
-    public SyncResult syncWithExchange() {
         try {
-            List<PositionInfo> exchangePositions = positionTrackerService.getPositionList();
-            LoggerUtils.logInfo("🔄 Найдено " + exchangePositions.size() + " активных позиций на Bybit");
+            Deal restoredDeal = StrategyFactory.getStrategy(strategyName).createDeal(pos, chatId, strategyName);
+            restoredDeal.setId(pos.getSymbol() + "_" + strategyName + "_" + System.currentTimeMillis());
 
+            restoreOrderIds(restoredDeal, pos.getSymbol().toString(), bybitManager);
+            activeDealStore.addDeal(restoredDeal);
 
-            SyncResult result = new SyncResult();
-            // 1. Обновляем существующие сделки
-            for (Deal deal : activeDealStore.getAllDeals()) {
-                PositionInfo positionOnExchange = findPosition(exchangePositions, deal.getSymbol().toString());
-                if (positionOnExchange == null) {
-                    handleClosedPosition(deal, result);
-                } else {
-                    updateExistingDeal(deal, positionOnExchange, result);
-                    // Удаляем из списка, чтобы не создавать дубли
-                    exchangePositions.remove(positionOnExchange);
-                }
+            StringBuilder result = new StringBuilder();
+            result.append("✅ Сделка для ").append(pos.getSymbol()).append(" восстановлена со стратегией '").append(strategyName).append("'.\n");
+
+            if (currentRestoreIndex < pendingNewPositions.size()) {
+                PositionInfo next = pendingNewPositions.get(currentRestoreIndex);
+                result.append("\n🆕 Следующая: ").append(next.getSymbol()).append(". Укажите стратегию:");
+            } else {
+                createDealsProcess = false;
+                result.append("\n✅ Все сделки восстановлены.");
             }
 
-            // 2. Создаём новые сделки из оставшихся позиций
-            createNewDealsFromPositions(exchangePositions, result);
+            LoggerUtils.info("✅ Восстановлена сделка: id=" + restoredDeal.getId() + ", TP orderId=" + restoredDeal.getTpOrderId() + ", SL orderId=" + restoredDeal.getSlOrderId());
 
-            return result;
+            return result.toString();
+
         } catch (Exception e) {
-            LoggerUtils.logError("🚨 Ошибка при синхронизации сделок с биржей", e);
-            return SyncResult.failed(e);
+            LoggerUtils.logError("Ошибка при создании сделки для " + pos.getSymbol(), e);
+            return "❌ Ошибка: " + e.getMessage();
         }
     }
 
+    // --- Вспомогательные ---
     private PositionInfo findPosition(List<PositionInfo> positions, String symbol) {
         return positions.stream()
-                .filter(p -> symbol.equals(p.getSymbol()))
+                .filter(p -> p.getSymbol().equals(symbol))
                 .findFirst()
                 .orElse(null);
     }
 
-    private void handleClosedPosition(Deal deal, SyncResult result) {
-        LoggerUtils.logInfo("🗑️ Позиция " + deal.getSymbol() + " закрыта на бирже");
-        activeDealStore.removeDeal(deal.getId());
-        result.removed++;
-    }
+    private String restoreOrderIds(Deal deal, String symbol, BybitManager bybitManager) {
 
-    private void updateExistingDeal(Deal deal, PositionInfo position, SyncResult result) {
+        StringBuilder result = new StringBuilder();
         try {
-            deal.updateDealFromBybitPosition(position);
-            restoreOrderIds(deal, position.getSymbol());
-            LoggerUtils.logDebug("✅ Сделка " + deal.getId() + " обновлена из данных Bybit");
-            result.updated++;
-        } catch (Exception e) {
-            LoggerUtils.logError("❌ Ошибка обновления сделки " + deal.getId(), e);
-            result.errors.add("Ошибка обновления сделки " + deal.getId() + ": " + e.getMessage());
-        }
-    }
-
-    private void createNewDealsFromPositions(List<PositionInfo> newPositions, SyncResult result) {
-        for (PositionInfo pos : newPositions) {
-            Deal restoredDeal = restoreDealFromPosition(pos);
-            if (restoredDeal != null) {
-                activeDealStore.addDeal(restoredDeal);
-                result.created++;
-                LoggerUtils.logInfo("🆕 Восстановлена сделка: " + restoredDeal.getId());
+            List<BybitPositionTrackerService.OrderInfo> orders = bybitManager.getBybitPositionTrackerService().getOrders(symbol);
+            if (orders == null || orders.isEmpty()) {
+                return "📭 Нет активных ордеров для символа " + symbol;
             }
-        }
-    }
 
-    private Deal restoreDealFromPosition(PositionInfo pos) {
-        try {
-            var strategy = StrategyFactory.getStrategy("ai"); // можно улучшить
-            Deal deal = new Deal(pos.getSymbol(), pos.getSide(), EntryType.MARKET, pos.getAvgPrice(),
-                    pos.getStopLoss(), new ArrayList<>());
+            LoggerUtils.logInfo("📥 ОРДЕРА " + symbol + ": " + JsonUtils.toJson(orders));
 
-            deal.setId(generateDealIdFromSymbol(pos.getSymbol()));
-            deal.setStrategyName("ai");
-            deal.updateDealFromBybitPosition(pos);
-            restoreOrderIds(deal, pos.getSymbol());
-
-            LoggerUtils.logInfo("🔁 Восстановлена сделка из позиции: " + deal);
-            return deal;
-
-        } catch (Exception e) {
-            LoggerUtils.logError("❌ Не удалось восстановить сделку из позиции: " + pos.getSymbol(), e);
-            return null;
-        }
-    }
-
-    private void restoreOrderIds(Deal deal, String symbol) {
-        try {
-            List<BybitPositionTrackerService.OrderInfo> orders = positionTrackerService.getOrders(symbol);
             for (BybitPositionTrackerService.OrderInfo order : orders) {
-                if ("TakeProfit".equals(order.getOrderType()) && order.isReduceOnly()) {
-                    OrderManager tpOrder = new OrderManager(order.getOrderId(), OrderManager.OrderType.TP, Double.parseDouble(order.getPrice()));
-                    deal.addOrderId(tpOrder);
+
+                // Пропускаем, если не reduceOnly
+                if (!Boolean.TRUE.equals(order.getReduceOnly())) {
+                    continue;
                 }
-                if ("StopLoss".equals(order.getOrderType()) && order.isReduceOnly()) {
-                    OrderManager slOrder = new OrderManager(order.getOrderId(), OrderManager.OrderType.SL, Double.parseDouble(order.getPrice()));
-                    deal.addOrderId(slOrder);
+
+                // Парсим triggerPrice
+                double triggerPrice;
+                try {
+                    triggerPrice = Double.parseDouble(order.getTriggerPrice());
+                } catch (NumberFormatException | NullPointerException e) {
+                    result.append("⚠️ Не удалось распарсить triggerPrice у ордера ").append(order.getOrderId()).append("\n");
+                    continue;
+                }
+
+                // Проверяем stopOrderType
+                if ("StopLoss".equals(order.getStopOrderType())) {
+                    deal.addOrderId(new OrderManager(
+                            order.getOrderId(),
+                            OrderManager.OrderType.SL,
+                            triggerPrice
+                    ));
+                    result.append("🔗 Привязан SL: ").append(order.getOrderId()).append(" -> ").append(triggerPrice).append("\n");
+                }
+
+                if ("TakeProfit".equals(order.getStopOrderType()) ||
+                        "PartialTakeProfit".equals(order.getStopOrderType())) {
+                    deal.addOrderId(new OrderManager(
+                            order.getOrderId(),
+                            OrderManager.OrderType.TP,
+                            triggerPrice
+                    ));
+                    result.append("🔗 Привязан TP: ").append(order.getOrderId()).append(" -> ").append(triggerPrice).append("\n");
                 }
             }
+
         } catch (IOException e) {
-            LoggerUtils.logWarn("⚠️ Не удалось получить ордера для символа " + symbol);
+            LoggerUtils.logError("⚠️ Не удалось загрузить ордера с Bybit для символа " + symbol, e);
+        } catch (NumberFormatException e) {
+            LoggerUtils.logError("❌ Ошибка парсинга цены при привязке TP/SL", e);
         }
+        return result.toString();
     }
 
-    private String generateDealIdFromSymbol(String symbol) {
-        return symbol + "_" + System.currentTimeMillis();
-    }
-
-    // --- Вспомогательные классы ---
-    public static class SyncResult {
-        public int updated = 0;
-        public int created = 0;
-        public int removed = 0;
-        public List<String> errors = new ArrayList<>();
-
-        public boolean isSuccess() {
-            return errors.isEmpty();
-        }
-
-        public static SyncResult failed(Exception e) {
-            SyncResult result = new SyncResult();
-            result.errors.add(e.getMessage());
-            return result;
-        }
-
-        @Override
-        public String toString() {
-            return "SyncResult{" +
-                    "updated=" + updated +
-                    ", created=" + created +
-                    ", removed=" + removed +
-                    ", errors=" + errors +
-                    '}';
-        }
-    }*/
 }

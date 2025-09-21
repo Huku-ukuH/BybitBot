@@ -12,12 +12,11 @@ import org.example.deal.dto.DealRequest;
 import org.example.deal.dto.DealValidationResult;
 import org.example.model.Direction;
 import org.example.model.EntryType;
-import org.example.monitor.dto.PositionInfo;
 import org.example.strategy.strategies.strategies.StrategyFactory;
 import org.example.util.EmojiUtils;
 import org.example.util.LoggerUtils;
 
-import java.io.IOException;
+
 import java.util.Arrays;
 import java.util.List;
 
@@ -46,9 +45,6 @@ public class BotCommandHandler {
         this.aiService = aiService;
     }
     public void handleCommand(long chatId, String command, String messageText) {
-        if (updateManager.isCreateDealsProcess()) {
-            handleUpdateDeals(chatId, messageText);
-        }
 
         switch (command.toLowerCase()) {
             case "/start", "/help" -> sendHelpMessage(chatId);
@@ -62,7 +58,7 @@ public class BotCommandHandler {
             case "/calculate" -> handleCalculate(chatId);
             case "/lossupdate" -> updateLossPrecent(chatId);
             case "/exit" -> handleExit(chatId);
-            case "/update" -> handleUpdateDeals(chatId, "defaultValue");
+            case "/update" -> handleUpdateDeals(chatId, messageText.isEmpty()? "defaultValue" : messageText);
             case "/setstrat" -> handleSetStrategy(chatId, messageText);
             default -> messageSender.send(chatId, EmojiUtils.INFO + " Неизвестная команда: " + command);
         }
@@ -92,7 +88,7 @@ public class BotCommandHandler {
         }
         if (currentDealId != null) {
             activeDealStore.removeDeal(currentDealId);
-            LoggerUtils.logInfo("cycleBreak() " + deal + "удалена из activeDealStore");
+            LoggerUtils.info("cycleBreak(): сделка " + (deal != null ? deal.getId() : "null") + " удалена из activeDealStore");
         }
         currentDealId = null;
         deal = null;
@@ -104,37 +100,50 @@ public class BotCommandHandler {
             messageSender.send(chatId, "Жду сигнал");
             return;
         }
+
         messageText = messageText.replace("/getsgnl", "").trim();
         if (messageText.isEmpty()) {
-            messageSender.sendWarn(chatId, "Сигнал пустой. Отмена.", "handleGetSignal()");
+            messageSender.sendWarn(chatId, "Сигнал пустой. Отмена.", "handleGetSignal");
             waitingSignal = false;
             return;
         }
         if (messageText.startsWith("/")) {
-            messageSender.sendWarn(chatId, "Нельзя отправлять команду как сигнал. Отмена.", "handleGetSignal()");
-            LoggerUtils.logWarn("Попытка использовать команду как сигнал: " + messageText);
+            messageSender.sendWarn(chatId, "Нельзя отправлять команду как сигнал. Отмена.", "handleGetSignal");
+            LoggerUtils.warn("Попытка использовать команду как сигнал: " + messageText);
             waitingSignal = false;
             return;
         }
-        try {
-            deal = StrategyFactory.getStrategy(strategyName).createDeal(aiService, messageText, chatId, strategyName);
-            currentDealId = deal.getId();
-            messageSender.send(chatId, deal.toString());
-            waitingSignal = false;
-        } catch (Exception e) {
 
+        Deal createdDeal = null;
+
+        // Попытка 1
+        try {
+            createdDeal = StrategyFactory.getStrategy(strategyName)
+                    .createDeal(aiService, messageText, chatId, strategyName);
+        } catch (Exception firstAttemptEx) {
+            LoggerUtils.warn("Первая попытка createDeal провалилась. Повтор...");
+
+            // Попытка 2 — только если причина в ИИ/парсинге, а не в фатальных ошибках
             try {
-                messageSender.sendError(chatId, "Ошибка обработки сигнала, пробуем снова", e, "handleGetSignal()");
-                deal = StrategyFactory.getStrategy(strategyName).createDeal(aiService, messageText, chatId, strategyName);
-                currentDealId = deal.getId();
-                messageSender.send(chatId, deal.toString());
-                waitingSignal = false;
-            } catch (Exception a) {
-                messageSender.sendError(chatId, "Не помогло :(", e, "handleGetSignal()");
+                createdDeal = StrategyFactory.getStrategy(strategyName)
+                        .createDeal(aiService, messageText, chatId, strategyName);
+            } catch (Exception secondAttemptEx) {
+                // Обе попытки провалились
+                String errorMsg = "Не удалось обработать сигнал после двух попыток";
+                messageSender.sendError(chatId, errorMsg, secondAttemptEx, "handleGetSignal");
+                LoggerUtils.error(errorMsg + ". Первое исключение:", firstAttemptEx);
                 cycleBreak(chatId);
                 waitingSignal = false;
+                return;
             }
         }
+
+        // Если хотя бы одна попытка прошла успешно
+        deal = createdDeal;
+        currentDealId = deal.getId();
+        messageSender.send(chatId, deal.toString());
+        LoggerUtils.info("Сделка создана успешно");
+        waitingSignal = false;
     }
     private void handleCheck(long chatId) {
         if (deal == null) {
@@ -257,30 +266,37 @@ public class BotCommandHandler {
     }
 
 
-       // todo: ПРОДОЛЖАТЬ ОТСЮДА
-  //метод обновления, а точнее метод восстановления сделок после перезагрузки бота,
-    // но пока это просто метод для обновления информации о сделках
-       private void handleUpdateDeals(long chatId, String strategyName) {
-           messageSender.send(chatId, "🔄 Обновление сделок из Bybit... Находится в разработке! Предлагаю заняться наладкой реакции на обновление цены от вебсокета");
-
-           try {
-               String updateResult = updateManager.updateDeals(bybitManager, activeDealStore, chatId, strategyName);
-
+         // todo: ПРОДОЛЖАТЬ ОТСЮДА
+        //метод обновления, а точнее метод восстановления сделок после перезагрузки бота,
+        // но пока это просто метод для обновления информации о сделках
+    private void handleUpdateDeals(long chatId, String strategyName) {
+       try {
+           if (updateManager.isCreateDealsProcess()) {
+               // Это ответ пользователя на запрос стратегии
+               String result = updateManager.updateDeals(bybitManager, activeDealStore, chatId, strategyName);
                if (updateManager.isCreateDealsProcess()) {
-                   List<String> strategyButtons = Arrays.asList(StrategyFactory.getAvailableStrategies().toArray(new String[0]));
-                   // ✅ Отправляем сообщение С КЛАВИАТУРОЙ
-                   messageSender.sendWithButtons(chatId, updateResult, strategyButtons);
+                   messageSender.sendWithButtons(chatId, result, StrategyFactory.getAvailableStrategies());
                    return;
                }
 
-               // ✅ Отправляем сообщение и ОЧИЩАЕМ клавиатуру (на случай, если она была)
-               messageSender.sendAndClearButtons(chatId, updateResult);
-
-           } catch (Exception e) {
-               LoggerUtils.logError("Надо же, ошибка", e);
-               messageSender.sendError(chatId, "Произошла ошибка при обновлении", e, "handleUpdateDeals");
+               messageSender.sendAndClearButtons(chatId, result);
+               return;
            }
+
+            // Первый вызов /update — просто синхронизация
+            String result = updateManager.updateDeals(bybitManager, activeDealStore, chatId, "");
+            if (updateManager.isCreateDealsProcess()) {
+                messageSender.sendWithButtons(chatId, result, StrategyFactory.getAvailableStrategies());
+            } else {
+                messageSender.sendAndClearButtons(chatId, result);
+            }
+
+       } catch (Exception e) {
+           String errorMsg = "Ошибка в handleUpdateDeals";
+           messageSender.sendAndClearButtons(chatId, errorMsg + ": " + e.getMessage());
+           LoggerUtils.error(errorMsg, e);
        }
+    }
 
 
     // --- Вспомогательные методы --- //
@@ -318,13 +334,13 @@ public class BotCommandHandler {
         // Сохраняем стратегию по умолчанию
         this.strategyName = strategyNameInput.toLowerCase(); // Приводим к нижнему регистру для единообразия
         messageSender.send(chatId, EmojiUtils.OKAY + " Стратегия по умолчанию для новых сделок установлена на: " + this.strategyName);
-        LoggerUtils.logInfo("Стратегия по умолчанию изменена пользователем на " + this.strategyName);
+        LoggerUtils.info("Стратегия по умолчанию изменена пользователем на " + this.strategyName);
     }
     // ------------------
     private  void updateLossPrecent(long chatId) {
         double updateLoss = StrategyFactory.getStrategy(strategyName).RiskUpdate(bybitManager.getBybitAccountService());
         String message = "Предел риска обновлен на " +  updateLoss + "$ на позицию";
         messageSender.send(chatId, message);
-        LoggerUtils.logInfo(message);
+        LoggerUtils.info(message);
     }
 }

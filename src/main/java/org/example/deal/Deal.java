@@ -51,7 +51,7 @@ public class Deal {
                 Double stopLoss, List<Double> takeProfits) {
 
         this.symbol = symbol;
-        this.id = "default " + symbol + id;
+        this.id = "default " + symbol + "DEFAULT_ID";
         this.direction = direction;
         this.entryType = entryType;
         this.entryPrice = entryPrice;
@@ -130,7 +130,7 @@ public class Deal {
         // Сохраняем старые значения для лога
         double oldLeverage = this.leverageUsed;
         double oldPositionSize = this.positionSize;
-        double oldPotentialLoss = this.potentialLoss;
+        double oldPotentialLoss = potentialLoss == null? 0.0 : this.potentialLoss;
         double oldEntryPrice = this.entryPrice;
         double oldStopLoss = this.stopLoss;
 
@@ -254,6 +254,30 @@ public class Deal {
             this.exitAmount = exitAmount;
         }
     }
+    /**
+     * Возвращает orderId ордера Take Profit (TP), если он привязан.
+     */
+    public String getTpOrderId() {
+        return getOrderIdByType(OrderManager.OrderType.TP);
+    }
 
+    /**
+     * Возвращает orderId ордера Stop Loss (SL), если он привязан.
+     */
+    public String getSlOrderId() {
+        return getOrderIdByType(OrderManager.OrderType.SL);
+    }
+
+    /**
+     * Внутренний метод поиска orderId по типу.
+     */
+    private String getOrderIdByType(OrderManager.OrderType type) {
+        if (ordersIdList == null) return null;
+        return ordersIdList.stream()
+                .filter(order -> order.getOrderType() == type)
+                .map(OrderManager::getOrderId)
+                .findFirst()
+                .orElse(null);
+    }
     // equals и hashCode можно добавить при необходимости, например, для хранения в Set
 }

@@ -11,7 +11,7 @@ public class BasedStrategy extends AbstractStrategy{
         return new StrategyConfig(
                 null,
                 null,
-                new int[]{5, 10, 20},
+                new int[]{10, 20},
                 null,
                 null,
                 null

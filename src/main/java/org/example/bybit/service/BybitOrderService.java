@@ -101,31 +101,50 @@ public class BybitOrderService {
     }
     public String closeDeal(Deal deal) {
         if (deal == null) {
-            return "BybitOrderService.closeDeal() - Deal is null";
+            return "❌ Deal is null";
         }
 
-        if (deal.getOrdersIdList() != null) {
-            for (OrderManager order : deal.getOrdersIdList()) {
-                if (order != null && order.getOrderId() != null && !order.getOrderId().isBlank()) {
-                    try {
-                        cancelOrder(deal, order.getOrderId());
-                    } catch (Exception e) {
-                        LoggerUtils.logError("closeDeal() ❌ Ошибка при отмене ордера: " + order, e);
-                    }
+        String symbol = deal.getSymbol().getSymbol();
+        String side = deal.getDirection() == Direction.LONG ? "Sell" : "Buy";
+
+        // --- Шаг 1: Отменяем TP и SL ---
+        for (OrderManager order : deal.getOrdersIdList()) {
+            if (order.getOrderType() == OrderManager.OrderType.TP ||
+                    order.getOrderType() == OrderManager.OrderType.SL) {
+                try {
+                    cancelOrder(deal, order.getOrderId());
+                } catch (Exception e) {
+                    LoggerUtils.logError("⚠️ Не удалось отменить ордер " + order.getOrderId(), e);
                 }
             }
-        } else {
-            LoggerUtils.logInfo("ℹ️ Нет ордеров для отмены для сделки: " + deal.getSymbol());
         }
 
-        // Закрываем позицию по рынку
+        // --- Шаг 2: Закрываем позицию ---
         try {
-            BybitOrderRequest request = BybitOrderRequest.forMarketCloseDeal(deal);
-            placeOrder(request);
+            Map<String, Object> params = Map.of(
+                    "category", "linear",
+                    "symbol", symbol,
+                    "side", side
+            );
 
+            Object response = bybitHttpClient.signedPost("/v5/position/close-position", JsonUtils.toJson(params), Object.class);
+
+            // Предполагаем, что ответ — это Map
+            @SuppressWarnings("unchecked")
+            Map<String, Object> result = (Map<String, Object>) response;
+            int retCode = (Integer) result.get("retCode");
+
+            if (retCode == 0) {
+                return "✅ Сделка `" + symbol + "` закрыта.";
+            }
+            return "❌ Ошибка: " + result.get("retMsg");
+
+        } catch (ClassCastException e) {
+            return "❌ Ошибка: неверный формат данных от сервера";
+        } catch (NullPointerException e) {
+            return "❌ Ошибка: неполные данные в ответе от API";
         } catch (Exception e) {
-            LoggerUtils.logError("❌ Ошибка при закрытии позиции: " + deal.getSymbol(), e);
+            return "❌ Ошибка: " + e.getMessage();
         }
-        return "closeDeal() Сделка закрыта по рынку:";
     }
 }

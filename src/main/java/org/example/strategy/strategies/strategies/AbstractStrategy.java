@@ -70,39 +70,62 @@ public abstract class AbstractStrategy implements TradingStrategy {
         try {
             request.setSymbol(positionInfo.getSymbol());
         } catch (Exception e) {
-            LoggerUtils.logError("❌ Не удалось присвоить тикер для dealRequest. (см совместимость типов в dealRequest) ", e);
+            LoggerUtils.logError("❌ Не удалось присвоить тикер для dealRequest. (см совместимость типов в dealRequest) " +
+                    "\n в методе createDeal(PositionInfo positionInfo, long chatId, String strategyName) ", e);
             throw e;
         }
         try {
             request.setDirection(positionInfo.getSide());
         } catch (Exception e) {
-            LoggerUtils.logError("❌ Не удалось присвоить направление для dealRequest. (см совместимость типов в dealRequest) ", e);
+            LoggerUtils.logError("❌ Не удалось присвоить направление для dealRequest. (см совместимость типов в dealRequest) " +
+                    "\n в методе createDeal(PositionInfo positionInfo, long chatId, String strategyName) ", e);
             throw e;
         }
         try {
             request.setEntryType(EntryType.MARKET);
             request.setEntryPrice(positionInfo.getAvgPrice());
             request.setStopLoss(positionInfo.getStopLoss());
-
         } catch (Exception e) {
-            LoggerUtils.logError("❌ Не удалось присвоить ТВХ, SL или тип входа сделку для dealRequest. (см совместимость типов в dealRequest) ", e);
+            LoggerUtils.logError("❌ Не удалось присвоить ТВХ, SL или тип входа сделку для dealRequest. (см совместимость типов в dealRequest) " +
+                    "\n в методе createDeal(PositionInfo positionInfo, long chatId, String strategyName) ", e);
             throw e;
         }
         try {
-            request.setTakeProfits(new ArrayList<>() {
-            });
+            request.setTakeProfits(new ArrayList<>() {});
         } catch (Exception e) {
-            LoggerUtils.logError("❌ Не удалось присвоить TP для dealRequest. (см совместимость типов в dealRequest) ", e);
+            LoggerUtils.logError("❌ Не удалось присвоить TP для dealRequest. (см совместимость типов в dealRequest) " +
+                    "\n в методе createDeal(PositionInfo positionInfo, long chatId, String strategyName) ", e);
             throw e;
         }
         try {
             deal = new Deal(request);
+        } catch (Exception e) {
+            LoggerUtils.logError("❌ Не удалось присвоить сделкe dealRequest " +
+                    "\n в методе createDeal(PositionInfo positionInfo, long chatId, String strategyName) ", e);
+        }
+        try {
             deal.setChatId(chatId);
+        } catch (Exception e) {
+            LoggerUtils.logError("❌ Не удалось установить ID сделкe " +
+                    "\n в методе createDeal(PositionInfo positionInfo, long chatId, String strategyName) ", e);
+        }
+        try {
             deal.setStrategyName(strategyName);
+        } catch (Exception e) {
+            LoggerUtils.logError("❌ Не удалось установить имя стратегии сделкe " +
+                    "\n в методе createDeal(PositionInfo positionInfo, long chatId, String strategyName) ", e);
+        }
+        try {
             deal.setPositionInfo(positionInfo);
+        } catch (Exception e) {
+            LoggerUtils.logError("❌ Не удалось установить PositionInfo сделкe " +
+                    "\n в методе createDeal(PositionInfo positionInfo, long chatId, String strategyName) ", e);
+        }
+        try {
             deal.updateDealFromBybitPosition(positionInfo);
         } catch (Exception e) {
-            LoggerUtils.logError("❌ Не удалось присвоить сделкe dealRequest ", e);
+            LoggerUtils.logError("❌ Не удалось успешно завершить метод updateDealFromBybitPosition в сделкe " +
+                    "\n в методе createDeal(PositionInfo positionInfo, long chatId, String strategyName) текст ошибки: " + e.getMessage(), e);
         }
         return deal;
     }

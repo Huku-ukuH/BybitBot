@@ -7,7 +7,7 @@ import java.util.List;
 //Фабрика для создания экземпляров торговых стратегий.
 public class StrategyFactory {
 
-    private static final List<String> AVAILABLE_STRATEGIES = List.of("ai"); // добавить имя сюда
+    private static final List<String> AVAILABLE_STRATEGIES = List.of("ai", "free" /*,"new"*/);      // добавить имя сюда
 
 
     //Получает экземпляр стратегии по её имени.
@@ -18,9 +18,10 @@ public class StrategyFactory {
 
         return switch (name.toLowerCase()) {
             case "ai" -> new BasedStrategy();
-            case "martingale" -> new MartingaleStrategy();
+            case "free" -> new FreeStrategy();
+            //case "new" -> new NewStrategy();                                                      // добавить имя сюда
             default -> {
-                LoggerUtils.logWarn("Запрошена неизвестная стратегия: " + name);
+                LoggerUtils.warn("Запрошена неизвестная стратегия: " + name);
                 throw new IllegalArgumentException("Неизвестная стратегия: " + name);
             }
         };

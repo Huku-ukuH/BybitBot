@@ -15,6 +15,8 @@ import org.telegram.telegrambots.meta.api.objects.Update;
 import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 @Getter
 public class TradingBot extends TelegramLongPollingBot {
+    private boolean tradingMode = true;
+    private boolean chatMode = false;
     private final AiService aiService = new AiService();
     private final UserStorage userStorage = new UserStorage();
     private final BybitManager bybitManager = new BybitManager();
@@ -61,33 +63,41 @@ public class TradingBot extends TelegramLongPollingBot {
                 return;
             }
 
-            // Команда /start
             if (messageText.equals("/start")) {
                 sendMessage(chatId, "Добро пожаловать! Здесь вы можете пообщаться с GigaChat бесплатно :) ");
                 return;
             }
 
             if (userStorage.isPremium(chatId)) {
-                if (commandHandler.isJustChat()) {
-                    sendMessage(chatId, commandHandler.getAiService().justChat(messageText));
+                if (tradingMode) {
+
+                    if (commandHandler.isJustChat()) {
+                        sendMessage(chatId, commandHandler.getAiService().justChat(messageText));
+                        return;
+                    }
+
+                    if (commandHandler.isWaitingSignal()) {
+                        messageText = "/getsgnl " + messageText;
+                    }
+
+                    if (commandHandler.getUpdateManager().isCreateDealsProcess() && StrategyFactory.isStrategyAvailable(messageText)) {
+                        messageText = "/update " + messageText;
+                    }
+
+                    if (messageText.startsWith("/")) {
+                        String[] parts = messageText.split(" ", 2);
+                        String command = parts[0];
+                        String args = parts.length > 1 ? parts[1] : "";
+                        commandHandler.handleCommand(chatId, command, args);
+                    }
                     return;
                 }
-                if (commandHandler.isWaitingSignal()) {
-                    messageText = "/getsgnl " + messageText;
-                }
-
-                if (messageText.startsWith("/")||StrategyFactory.isStrategyAvailable(messageText)) {
-                    String[] parts = messageText.split(" ", 2);
-                    String command = parts[0];
-                    String args = parts.length > 1 ? parts[1] : "";
-                    commandHandler.handleCommand(chatId, command, args);
-                }
-                return;
             }
 
             sendMessage(chatId, commandHandler.getAiService().justChat(messageText));
         }
     }
+
 
 
     public void sendMessage(long chatId, String text) {
