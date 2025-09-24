@@ -23,7 +23,7 @@ public class DealValidator {
     boolean changeEntryPrise;
 
     public DealValidationResult validate(Deal deal, BybitMarketService bybitMarketService) {
-        LoggerUtils.logDebug("DealValidationResult validate - Начался цикл проверки сделки:");
+        LoggerUtils.debug("DealValidationResult validate - Начался цикл проверки сделки:");
 
                 ValidationUtils.checkNotNull(deal, EmojiUtils.WARN + " validate() Deal cannot be null");
 
@@ -42,7 +42,7 @@ public class DealValidator {
             entryPrice = null;
             changeEntryPrise = false;
         }
-        LoggerUtils.logDebug("DealValidationResult validate - Прошел цикл проверки сделки:\n" +
+        LoggerUtils.debug("DealValidationResult validate - Прошел цикл проверки сделки:\n" +
                 "SL по отношению к ТВХ\nTP по отношению к ТВХ\nTP по отношению к SL\nДальность значений TP и SL\nТекущая цена по монете = " + deal.getEntryPrice());
         return new DealValidationResult(warnings, errors);
     }

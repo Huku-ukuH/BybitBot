@@ -1,9 +1,8 @@
 package org.example.strategy.params;
 
 import org.example.deal.Deal;
-import org.example.model.Direction;
 import org.example.util.LoggerUtils;
-import org.example.util.MathUtils;
+
 /**
  * Универсальный менеджер Stop Loss.
  * Предоставляет методы для расчета и обновления SL,
@@ -45,7 +44,7 @@ public class StopLossManager {
     //метод выше - оригинальный
 
     public static boolean moveStopLoss(Deal deal, double newSl) {
-            LoggerUtils.logDebug("ИМИТАЦИЯ ПРОВЕРКИ И ПЕРЕНОСА СТОПА   НОВЫЙ СТОП (" + newSl + ")   СТАРЫЙ СТОП (" + deal.getStopLoss() + ") для сделки " + deal.getSymbol());
+            LoggerUtils.debug("ИМИТАЦИЯ ПРОВЕРКИ И ПЕРЕНОСА СТОПА   НОВЫЙ СТОП (" + newSl + ")   СТАРЫЙ СТОП (" + deal.getStopLoss() + ") для сделки " + deal.getSymbol());
             return false;
     }
 

@@ -31,7 +31,7 @@ public class BybitMarketService {
         TickerResponse response = httpClient.get(endpoint, params, TickerResponse.class);
         List<TickerResponse.Ticker> tickers = response.getResult().getList();
 
-        LoggerUtils.logDebug("ответ getLastPrice для " + symbol + ": " + tickers); // Изменено на logDebug
+        LoggerUtils.debug("ответ getLastPrice для " + symbol + ": " + tickers); // Изменено на logDebug
         if (tickers == null || tickers.isEmpty()) {
             throw new RuntimeException("Пустой список тикеров для символа: " + symbol);
         }
@@ -46,11 +46,11 @@ public class BybitMarketService {
     public double getMinOrderQty(String symbol) {
         InstrumentInfoResponse.Instrument instrumentInfo = getInstrumentInfoFromCacheOrApi(symbol);
         double minOrderQty = instrumentInfo.getLotSizeFilter().getMinOrderQty();
-        LoggerUtils.logDebug("Информация о " + symbol + " получена из кэша. MinOrderQty =" + minOrderQty);
+        LoggerUtils.debug("Информация о " + symbol + " получена из кэша. MinOrderQty =" + minOrderQty);
         if (minOrderQty <= 0) {
             throw new IllegalStateException("Некорректный minOrderQty для " + symbol + ": " + minOrderQty);
         }
-        LoggerUtils.logDebug("Минимальное количество для ордера (" + symbol + "): " + minOrderQty);
+        LoggerUtils.debug("Минимальное количество для ордера (" + symbol + "): " + minOrderQty);
         return minOrderQty;
     }
 
@@ -58,7 +58,7 @@ public class BybitMarketService {
     public double getLotSizeStep(String symbol) {
         InstrumentInfoResponse.Instrument instrumentInfo = getInstrumentInfoFromCacheOrApi(symbol);
         double qtyStep = instrumentInfo.getLotSizeFilter().getQtyStep();
-        LoggerUtils.logDebug("Информация о " + symbol + " получена из кэша. qtyStep =" + qtyStep);
+        LoggerUtils.debug("Информация о " + symbol + " получена из кэша. qtyStep =" + qtyStep);
         if (qtyStep <= 0) {
             throw new IllegalStateException("Неверный qtyStep для символа: " + symbol + " (qtyStep=" + qtyStep + ")");
         }
@@ -76,7 +76,7 @@ public class BybitMarketService {
 
         double stepSize = instrumentInfo.getLotSizeFilter().getQtyStep();
         double minQty = instrumentInfo.getLotSizeFilter().getMinOrderQty();
-        LoggerUtils.logDebug("Информация о stepSize и minQty для" + symbol + " получена из кэша.\n stepSize =" + stepSize + "\nminQty =" + minQty);
+        LoggerUtils.debug("Информация о stepSize и minQty для" + symbol + " получена из кэша.\n stepSize =" + stepSize + "\nminQty =" + minQty);
 
 
         if (stepSize <= 0 || minQty <= 0) {
@@ -85,7 +85,7 @@ public class BybitMarketService {
         }
 
         if (quantity < minQty) {
-            LoggerUtils.logDebug("🔁 Входное кол-во " + quantity + " меньше minQty " + minQty + " — замена на minQty.");
+            LoggerUtils.debug("🔁 Входное кол-во " + quantity + " меньше minQty " + minQty + " — замена на minQty.");
             return formatQuantity(minQty);
         }
 
@@ -95,7 +95,7 @@ public class BybitMarketService {
         double result = rounded.doubleValue();
 
         if (result < minQty) {
-            LoggerUtils.logWarn("⚠️ После округления кол-во " + result + " оказалось меньше minQty " + minQty +
+            LoggerUtils.warn("⚠️ После округления кол-во " + result + " оказалось меньше minQty " + minQty +
                     " для символа " + symbol + ". Возвращаем minQty.");
             result = minQty;
         }
@@ -111,7 +111,7 @@ public class BybitMarketService {
             return cachedInfo;
         }
 
-        LoggerUtils.logDebug("Информация об инструменте " + symbol + " отсутствует в кэше. Запрос к API Bybit.");
+        LoggerUtils.debug("Информация об инструменте " + symbol + " отсутствует в кэше. Запрос к API Bybit.");
         String endpoint = "/v5/market/instruments-info";
         Map<String, String> params = Map.of(
                 "category", ACCOUNT_CATEGORY,
@@ -128,7 +128,7 @@ public class BybitMarketService {
 
         // 3. Сохраняем в кэш
         instrumentInfoCache.put(symbol, instrumentInfo);
-        LoggerUtils.logDebug("Информация об инструменте " + symbol + " сохранена в кэш.");
+        LoggerUtils.debug("Информация об инструменте " + symbol + " сохранена в кэш.");
 
         return instrumentInfo;
     }

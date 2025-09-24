@@ -5,7 +5,6 @@ import org.example.bybit.BybitManager;
 import org.example.bybit.service.BybitPositionTrackerService;
 import org.example.monitor.dto.PositionInfo;
 import org.example.strategy.strategies.strategies.StrategyFactory;
-import org.example.util.EmojiUtils;
 import org.example.util.JsonUtils;
 import org.example.util.LoggerUtils;
 
@@ -121,7 +120,7 @@ public class UpdateManager {
             return result.toString();
 
         } catch (Exception e) {
-            LoggerUtils.logError("Ошибка при создании сделки для " + pos.getSymbol(), e);
+            LoggerUtils.error("Ошибка при создании сделки для " + pos.getSymbol(), e);
             return "❌ Ошибка: " + e.getMessage();
         }
     }
@@ -143,7 +142,7 @@ public class UpdateManager {
                 return "📭 Нет активных ордеров для символа " + symbol;
             }
 
-            LoggerUtils.logInfo("📥 ОРДЕРА " + symbol + ": " + JsonUtils.toJson(orders));
+            LoggerUtils.info("📥 ОРДЕРА " + symbol + ": " + JsonUtils.toJson(orders));
 
             for (BybitPositionTrackerService.OrderInfo order : orders) {
 
@@ -183,9 +182,9 @@ public class UpdateManager {
             }
 
         } catch (IOException e) {
-            LoggerUtils.logError("⚠️ Не удалось загрузить ордера с Bybit для символа " + symbol, e);
+            LoggerUtils.error("⚠️ Не удалось загрузить ордера с Bybit для символа " + symbol, e);
         } catch (NumberFormatException e) {
-            LoggerUtils.logError("❌ Ошибка парсинга цены при привязке TP/SL", e);
+            LoggerUtils.error("❌ Ошибка парсинга цены при привязке TP/SL", e);
         }
         return result.toString();
     }

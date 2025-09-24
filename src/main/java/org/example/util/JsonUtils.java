@@ -16,7 +16,7 @@ public class JsonUtils {
             return mapper.writeValueAsString(object);
         } catch (JsonProcessingException e) {
             String message = String.format("❌ Ошибка сериализации объекта в JSON.\n\nКласс: %s", object.getClass().getName());
-            LoggerUtils.logError(message, e);
+            LoggerUtils.error(message, e);
             throw new RuntimeException(message, e);
         }
     }
@@ -27,7 +27,7 @@ public class JsonUtils {
             return createObjectMapper().readValue(json, clazz);
         } catch (JsonProcessingException e) {
             String message = String.format("❌ Ошибка десериализации JSON в объект.\nJSON: %s\n\nКласс: %s", json, clazz.getName());
-            LoggerUtils.logError(message, e);
+            LoggerUtils.error(message, e);
             throw new RuntimeException(message, e);
         }
     }

@@ -45,7 +45,7 @@ public class BybitPositionTrackerService {
 
             if (!Integer.valueOf(0).equals(root.get("retCode"))) {
                 String errorMsg = (String) root.get("retMsg");
-                LoggerUtils.logWarn("Bybit вернул ошибку в /v5/position/list: " + errorMsg);
+                LoggerUtils.warn("Bybit вернул ошибку в /v5/position/list: " + errorMsg);
                 return Collections.emptyList();
             }
 
@@ -66,7 +66,7 @@ public class BybitPositionTrackerService {
                             String json = JsonUtils.toJson(item);
                             return JsonUtils.fromJson(json, PositionInfo.class);
                         } catch (Exception e) {
-                            LoggerUtils.logError("Ошибка конвертации позиции из JSON: " + item, e);
+                            LoggerUtils.error("Ошибка конвертации позиции из JSON: " + item, e);
                             return null;
                         }
                     })
@@ -74,7 +74,7 @@ public class BybitPositionTrackerService {
                     .collect(Collectors.toList());
 
         } catch (Exception e) {
-            LoggerUtils.logError("Ошибка при получении списка позиций", e);
+            LoggerUtils.error("Ошибка при получении списка позиций", e);
             throw new IOException("Не удалось получить список позиций", e);
         }
     }
@@ -163,20 +163,20 @@ public class BybitPositionTrackerService {
             // Проверяем retCode как Integer
             if (!Integer.valueOf(0).equals(root.get("retCode"))) {
                 String errorMsg = (String) root.getOrDefault("retMsg", "Unknown error");
-                LoggerUtils.logWarn("Bybit вернул ошибку в /v5/order/realtime: " + errorMsg);
+                LoggerUtils.warn("Bybit вернул ошибку в /v5/order/realtime: " + errorMsg);
                 return Collections.emptyList();
             }
 
             Map<String, Object> result = (Map<String, Object>) root.get("result");
             if (result == null) {
-                LoggerUtils.logDebug("Ответ от /v5/order/realtime: 'result' is null");
+                LoggerUtils.debug("Ответ от /v5/order/realtime: 'result' is null");
                 return Collections.emptyList();
             }
 
             @SuppressWarnings("unchecked")
             List<Map<String, Object>> list = (List<Map<String, Object>>) result.get("list");
             if (list == null || list.isEmpty()) {
-                LoggerUtils.logDebug("Список ордеров пуст для символа: " + symbol);
+                LoggerUtils.debug("Список ордеров пуст для символа: " + symbol);
                 return Collections.emptyList();
             }
 
@@ -187,7 +187,7 @@ public class BybitPositionTrackerService {
                             String json = JsonUtils.toJson(item);
                             return JsonUtils.fromJson(json, OrderInfo.class);
                         } catch (Exception e) {
-                            LoggerUtils.logError("Ошибка конвертации ордера из JSON: " + item, e);
+                            LoggerUtils.error("Ошибка конвертации ордера из JSON: " + item, e);
                             return null;
                         }
                     })
@@ -195,7 +195,7 @@ public class BybitPositionTrackerService {
                     .collect(Collectors.toList());
 
         } catch (Exception e) {
-            LoggerUtils.logError("Ошибка при получении списка ордеров для символа " + symbol, e);
+            LoggerUtils.error("Ошибка при получении списка ордеров для символа " + symbol, e);
             throw new IOException("Не удалось получить список ордеров", e);
         }
     }

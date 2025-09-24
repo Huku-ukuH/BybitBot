@@ -37,7 +37,7 @@ public abstract class AbstractStrategy implements TradingStrategy {
     protected final Set<Double> triggeredPnlLevels = new HashSet<>();
     public AbstractStrategy() {
         this.config = createConfig();
-        LoggerUtils.logDebug(getClass().getSimpleName() + ": Инициализирована с конфигом: " + config);
+        LoggerUtils.debug(getClass().getSimpleName() + ": Инициализирована с конфигом: " + config);
     }
     protected StrategyConfig createConfig() {
         return new StrategyConfig();
@@ -49,7 +49,7 @@ public abstract class AbstractStrategy implements TradingStrategy {
      */
     @Override
     public Deal createDeal(AiService aiService, String messageText, long chatId, String strategyName) {
-        LoggerUtils.logDebug("Создание сделки по сигналу: " + messageText);
+        LoggerUtils.debug("Создание сделки по сигналу: " + messageText);
         try {
             DealRequest request = aiService.parseSignal(messageText);
             Deal deal = new Deal(request);
@@ -57,27 +57,27 @@ public abstract class AbstractStrategy implements TradingStrategy {
             deal.setStrategyName(strategyName);
             return deal;
         } catch (Exception e) {
-            LoggerUtils.logError("❌ Не удалось создать сделку по сигналу: " + messageText, e);
+            LoggerUtils.error("❌ Не удалось создать сделку по сигналу: " + messageText, e);
             throw e;
         }
     }
 
     @Override
     public Deal createDeal(PositionInfo positionInfo, long chatId, String strategyName) {
-        LoggerUtils.logDebug("Создание сделки по существующей позиции: ");
+        LoggerUtils.debug("Создание сделки по существующей позиции: ");
         DealRequest request = new DealRequest();
         Deal deal = null;
         try {
             request.setSymbol(positionInfo.getSymbol());
         } catch (Exception e) {
-            LoggerUtils.logError("❌ Не удалось присвоить тикер для dealRequest. (см совместимость типов в dealRequest) " +
+            LoggerUtils.error("❌ Не удалось присвоить тикер для dealRequest. (см совместимость типов в dealRequest) " +
                     "\n в методе createDeal(PositionInfo positionInfo, long chatId, String strategyName) ", e);
             throw e;
         }
         try {
             request.setDirection(positionInfo.getSide());
         } catch (Exception e) {
-            LoggerUtils.logError("❌ Не удалось присвоить направление для dealRequest. (см совместимость типов в dealRequest) " +
+            LoggerUtils.error("❌ Не удалось присвоить направление для dealRequest. (см совместимость типов в dealRequest) " +
                     "\n в методе createDeal(PositionInfo positionInfo, long chatId, String strategyName) ", e);
             throw e;
         }
@@ -86,45 +86,45 @@ public abstract class AbstractStrategy implements TradingStrategy {
             request.setEntryPrice(positionInfo.getAvgPrice());
             request.setStopLoss(positionInfo.getStopLoss());
         } catch (Exception e) {
-            LoggerUtils.logError("❌ Не удалось присвоить ТВХ, SL или тип входа сделку для dealRequest. (см совместимость типов в dealRequest) " +
+            LoggerUtils.error("❌ Не удалось присвоить ТВХ, SL или тип входа сделку для dealRequest. (см совместимость типов в dealRequest) " +
                     "\n в методе createDeal(PositionInfo positionInfo, long chatId, String strategyName) ", e);
             throw e;
         }
         try {
             request.setTakeProfits(new ArrayList<>() {});
         } catch (Exception e) {
-            LoggerUtils.logError("❌ Не удалось присвоить TP для dealRequest. (см совместимость типов в dealRequest) " +
+            LoggerUtils.error("❌ Не удалось присвоить TP для dealRequest. (см совместимость типов в dealRequest) " +
                     "\n в методе createDeal(PositionInfo positionInfo, long chatId, String strategyName) ", e);
             throw e;
         }
         try {
             deal = new Deal(request);
         } catch (Exception e) {
-            LoggerUtils.logError("❌ Не удалось присвоить сделкe dealRequest " +
+            LoggerUtils.error("❌ Не удалось присвоить сделкe dealRequest " +
                     "\n в методе createDeal(PositionInfo positionInfo, long chatId, String strategyName) ", e);
         }
         try {
             deal.setChatId(chatId);
         } catch (Exception e) {
-            LoggerUtils.logError("❌ Не удалось установить ID сделкe " +
+            LoggerUtils.error("❌ Не удалось установить ID сделкe " +
                     "\n в методе createDeal(PositionInfo positionInfo, long chatId, String strategyName) ", e);
         }
         try {
             deal.setStrategyName(strategyName);
         } catch (Exception e) {
-            LoggerUtils.logError("❌ Не удалось установить имя стратегии сделкe " +
+            LoggerUtils.error("❌ Не удалось установить имя стратегии сделкe " +
                     "\n в методе createDeal(PositionInfo positionInfo, long chatId, String strategyName) ", e);
         }
         try {
             deal.setPositionInfo(positionInfo);
         } catch (Exception e) {
-            LoggerUtils.logError("❌ Не удалось установить PositionInfo сделкe " +
+            LoggerUtils.error("❌ Не удалось установить PositionInfo сделкe " +
                     "\n в методе createDeal(PositionInfo positionInfo, long chatId, String strategyName) ", e);
         }
         try {
             deal.updateDealFromBybitPosition(positionInfo);
         } catch (Exception e) {
-            LoggerUtils.logError("❌ Не удалось успешно завершить метод updateDealFromBybitPosition в сделкe " +
+            LoggerUtils.error("❌ Не удалось успешно завершить метод updateDealFromBybitPosition в сделкe " +
                     "\n в методе createDeal(PositionInfo positionInfo, long chatId, String strategyName) текст ошибки: " + e.getMessage(), e);
         }
         return deal;
@@ -158,7 +158,7 @@ public abstract class AbstractStrategy implements TradingStrategy {
                 deal.setId(orderResponse.getOrderResult().getOrderId());
                 return true;
             } else {
-                LoggerUtils.logWarn("Ордер не размещён для " + deal.getSymbol() + ": " + fullMessage);
+                LoggerUtils.warn("Ордер не размещён для " + deal.getSymbol() + ": " + fullMessage);
                 return false;
             }
         } catch (Exception e) {
@@ -183,7 +183,7 @@ public abstract class AbstractStrategy implements TradingStrategy {
             }
 
             result = "✅ Стоп-лосс установлен для " + deal.getSymbol() + ": " + deal.getStopLoss();
-            LoggerUtils.logInfo(result);
+            LoggerUtils.info(result);
         } catch (Exception e) {
             throw new RuntimeException("❌ Ошибка при установке SL для символа " + deal.getSymbol(), e);
         }
@@ -206,13 +206,13 @@ public abstract class AbstractStrategy implements TradingStrategy {
 
             return exitPlanManager.executeExitPlan(deal, plan);
         } catch (Exception e) {
-            LoggerUtils.logError("❌ Ошибка при установке TP для символа " + deal.getSymbol(), e);
+            LoggerUtils.error("❌ Ошибка при установке TP для символа " + deal.getSymbol(), e);
             throw new RuntimeException("❌ Ошибка при установке TP для символа " + deal.getSymbol(), e);
         }
     }
     public ExitPlan planExit(Deal deal) {
         try {
-            LoggerUtils.logInfo("🔍 " + getClass().getSimpleName() + ": Начало сделки " + deal.getId());
+            LoggerUtils.info("🔍 " + getClass().getSimpleName() + ": Начало сделки " + deal.getId());
 
             StrategyConfig config = this.getConfig();
             double entryPrice = deal.getEntryPrice();
@@ -230,27 +230,27 @@ public abstract class AbstractStrategy implements TradingStrategy {
             // 2. Попытка по PnL
             Map<Double, Integer> pnlRules = config.getPnlTpExitRules();
             if (pnlRules != null && !pnlRules.isEmpty()) {
-                LoggerUtils.logInfo("📈 PnL-правила: " + pnlRules);
-                LoggerUtils.logInfo("➤ Вызываю ExitPlan.fromPnl() для создания плана по PnL");
+                LoggerUtils.info("📈 PnL-правила: " + pnlRules);
+                LoggerUtils.info("➤ Вызываю ExitPlan.fromPnl() для создания плана по PnL");
 
                 // 🔥 Здесь происходит NoSuchMethodError
                 ExitPlan plan = ExitPlan.fromPnl(pnlRules, entryPrice, direction);
 
                 if (plan != null && !plan.getSteps().isEmpty()) {
-                    LoggerUtils.logInfo("✅ План по PnL создан");
+                    LoggerUtils.info("✅ План по PnL создан");
                     return plan;
                 }
             }
 
-            LoggerUtils.logWarn("⚠️ Не удалось создать план выхода");
+            LoggerUtils.warn("⚠️ Не удалось создать план выхода");
             return null;
 
         } catch (Error err) {
             // ✅ Ловим NoSuchMethodError
-            LoggerUtils.logError("🔴 FATAL: Ошибка выполнения (возможно, метод не найден)", err);
+            LoggerUtils.error("🔴 FATAL: Ошибка выполнения (возможно, метод не найден)", err);
             return null;
         } catch (Exception e) {
-            LoggerUtils.logError("Ошибка в planExit()", e);
+            LoggerUtils.error("Ошибка в planExit()", e);
             e.printStackTrace();
             return null;
         }
@@ -282,7 +282,7 @@ public abstract class AbstractStrategy implements TradingStrategy {
             return;
         }
         if (price.getResult() == null || price.getResult().getList() == null || price.getResult().getList().isEmpty()) {
-            LoggerUtils.logWarn(getClass().getSimpleName() + " onPriceUpdate: Получен пустой TickerResponse для сделки " + deal.getId());
+            LoggerUtils.warn(getClass().getSimpleName() + " onPriceUpdate: Получен пустой TickerResponse для сделки " + deal.getId());
             return;
         }
 
@@ -295,13 +295,13 @@ public abstract class AbstractStrategy implements TradingStrategy {
                     currentPrice = Double.parseDouble(ticker.getLastPrice());
                     break;
                 } catch (NumberFormatException e) {
-                    LoggerUtils.logError("onPriceUpdate: Ошибка парсинга цены для " + ticker.getSymbol(), e);
+                    LoggerUtils.error("onPriceUpdate: Ошибка парсинга цены для " + ticker.getSymbol(), e);
                 }
             }
         }
 
         if (currentPrice == null) {
-            LoggerUtils.logWarn("onPriceUpdate: Цена для " + dealSymbol + " не найдена.");
+            LoggerUtils.warn("onPriceUpdate: Цена для " + dealSymbol + " не найдена.");
             return;
         }
 
@@ -309,7 +309,7 @@ public abstract class AbstractStrategy implements TradingStrategy {
         Direction direction = deal.getDirection();
 
         if (entryPrice <= 0) {
-            LoggerUtils.logWarn("onPriceUpdate: Некорректная цена входа для сделки " + deal.getId());
+            LoggerUtils.warn("onPriceUpdate: Некорректная цена входа для сделки " + deal.getId());
             return;
         }
 
@@ -320,12 +320,12 @@ public abstract class AbstractStrategy implements TradingStrategy {
             pnlPercent = ((entryPrice - currentPrice) / entryPrice) * 100.0 * deal.getLeverageUsed();
         }
 
-        LoggerUtils.logDebug("BasedStrategy (" + deal.getId() + "): PnL = " + String.format("%.2f", pnlPercent) + "%");
+        LoggerUtils.debug("BasedStrategy (" + deal.getId() + "): PnL = " + String.format("%.2f", pnlPercent) + "%");
 
         // Получаем правила выхода по PnL из конфига стратегии
         Map<Double, Integer> pnlRules = config.getPnlTpExitRules();
         if (pnlRules.isEmpty()) {
-            LoggerUtils.logDebug("BasedStrategy: Нет правил выхода по PnL в конфиге.");
+            LoggerUtils.debug("BasedStrategy: Нет правил выхода по PnL в конфиге.");
             return;
         }
 
@@ -340,7 +340,7 @@ public abstract class AbstractStrategy implements TradingStrategy {
             if (levelReached && !triggeredPnlLevels.contains(targetPnlLevel)) {
                 // deal.addTakeProfit(currentPrice);
                 triggeredPnlLevels.add(targetPnlLevel);
-                LoggerUtils.logInfo("BasedStrategy: Достигнут PnL " + String.format("%.2f", targetPnlLevel) +
+                LoggerUtils.info("BasedStrategy: Достигнут PnL " + String.format("%.2f", targetPnlLevel) +
                         "%. Установлен TP. Планируется выход " + exitPercentage + "% позиции.");
 
 
@@ -352,11 +352,11 @@ public abstract class AbstractStrategy implements TradingStrategy {
     }
     @Override
     public void onTakeProfitHit(StrategyContext context, double executedPrice) {
-        LoggerUtils.logInfo(getClass().getSimpleName() + ": Сработал TP на уровне " + executedPrice + ".");
+        LoggerUtils.info(getClass().getSimpleName() + ": Сработал TP на уровне " + executedPrice + ".");
     }
     @Override
     public void onStopLossHit(StrategyContext context) {
-        LoggerUtils.logWarn(getClass().getSimpleName() + ": Сработал SL.");
+        LoggerUtils.warn(getClass().getSimpleName() + ": Сработал SL.");
         triggeredPnlLevels.clear();
     }
 

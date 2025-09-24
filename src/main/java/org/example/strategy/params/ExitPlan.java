@@ -55,8 +55,8 @@ public class ExitPlan {
      * PnL-уровни — это проценты прибыли, при достижении которых нужно выйти.
      */
     public static ExitPlan fromPnl(Map<Double, Integer> pnlRules, double entryPrice, Direction direction)  {
-        LoggerUtils.logInfo("📊 ExitPlan.fromPnl(): Начало создания плана по PnL");
-        LoggerUtils.logInfo("  ➤ Цена входа: " + entryPrice +
+        LoggerUtils.info("📊 ExitPlan.fromPnl(): Начало создания плана по PnL");
+        LoggerUtils.info("  ➤ Цена входа: " + entryPrice +
                 "\n➤ Направление: \" + direction)" +
                 "\n➤ Количество PnL-уровней: " + pnlRules.size());
 
@@ -69,15 +69,15 @@ public class ExitPlan {
 
             if (direction == Direction.LONG) {
                 targetPrice =MathUtils.formatPrice(entryPrice, entryPrice * (1 + pnlPercent / 100.0));                        //возможное место ошибок
-                LoggerUtils.logInfo("  ➤ " + pnlPercent + "% → цена = " + entryPrice + " * (1 + " + (pnlPercent / 100.0) + ") = " + MathUtils.formatPrice(entryPrice, targetPrice));
+                LoggerUtils.info("  ➤ " + pnlPercent + "% → цена = " + entryPrice + " * (1 + " + (pnlPercent / 100.0) + ") = " + MathUtils.formatPrice(entryPrice, targetPrice));
             } else {
                 targetPrice =MathUtils.formatPrice(entryPrice, entryPrice * (1 - pnlPercent / 100.0));                               //возможное место ошибок
-                LoggerUtils.logInfo("  ➤ " + pnlPercent + "% → цена = " + entryPrice + " * (1 - " + (pnlPercent / 100.0) + ") = " + MathUtils.formatPrice(entryPrice, targetPrice));
+                LoggerUtils.info("  ➤ " + pnlPercent + "% → цена = " + entryPrice + " * (1 - " + (pnlPercent / 100.0) + ") = " + MathUtils.formatPrice(entryPrice, targetPrice));
             }
 
             // Защита от некорректной цены
             if (targetPrice <= 0) {
-                LoggerUtils.logWarn("❌❌❌❌❌ fromPnl(): Рассчитанная цена <= 0: " + targetPrice + " (пропускаем уровень)❌❌❌❌❌");
+                LoggerUtils.warn("❌❌❌❌❌ fromPnl(): Рассчитанная цена <= 0: " + targetPrice + " (пропускаем уровень)❌❌❌❌❌");
                 continue;
             }
 
@@ -85,11 +85,11 @@ public class ExitPlan {
         }
 
         if (steps.isEmpty()) {
-            LoggerUtils.logWarn("⚠️ ExitPlan.fromPnl(): Все уровни были отфильтрованы — возвращаем null");
+            LoggerUtils.warn("⚠️ ExitPlan.fromPnl(): Все уровни были отфильтрованы — возвращаем null");
             return null;
         }
 
-        LoggerUtils.logInfo("✅ ExitPlan.fromPnl(): План создан с " + steps.size() + " шагами");
+        LoggerUtils.info("✅ ExitPlan.fromPnl(): План создан с " + steps.size() + " шагами");
         return new ExitPlan(steps, ExitType.PNL);
     }
     @Getter

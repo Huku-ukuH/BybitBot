@@ -28,7 +28,7 @@ public class BybitAccountService {
         // найти почему BalanceResponse(retCode=0, retMsg=invalid request
         BalanceResponse response = httpClient.signedGet(endpoint, queryParams, BalanceResponse.class);
 
-        LoggerUtils.logInfo(response.toString());
+        LoggerUtils.info(response.toString());
 
         if (response.getResult() == null || response.getResult().getList() == null) {
             throw new RuntimeException("Пустой результат. Проверь accountType или доступ API.");

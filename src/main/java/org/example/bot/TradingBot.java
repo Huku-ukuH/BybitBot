@@ -54,7 +54,7 @@ public class TradingBot extends TelegramLongPollingBot {
             String username = update.getMessage().getChat().getUserName();
             String firstName = update.getMessage().getChat().getFirstName();
 
-            LoggerUtils.logInfo("\n\uD83D\uDCAC @" + username + "(" + chatId + ") " + firstName + ": " + messageText);
+            LoggerUtils.info("\n\uD83D\uDCAC @" + username + "(" + chatId + ") " + firstName + ": " + messageText);
 
             userStorage.addBlockedUser(chatId);
             if (userStorage.isBlocked(chatId)) {
@@ -107,7 +107,7 @@ public class TradingBot extends TelegramLongPollingBot {
         try {
             execute(message);
         } catch (TelegramApiException e) {
-            LoggerUtils.logError("Ошибка отправки сообщения telegram", e);
+            LoggerUtils.error("Ошибка отправки сообщения telegram", e);
             e.printStackTrace();
         }
     }

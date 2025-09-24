@@ -48,4 +48,6 @@ public class LoggerUtils {
     public static void error(String message) {
         getCurrentLogger().error("{} {}", EmojiUtils.ERROR, message);
     }
+
+
 }

@@ -15,10 +15,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
-import java.util.Collections;
-import java.util.ArrayList;
 
 @Data
 public class PriceMonitor {
@@ -45,7 +41,7 @@ public class PriceMonitor {
     }
 
     public void handlePriceUpdate(PriceUpdate update) {
-        LoggerUtils.logInfo("📈 Цена обновлена: " + update.getSymbol() + " = " + update.getPrice());
+        LoggerUtils.info("📈 Цена обновлена: " + update.getSymbol() + " = " + update.getPrice());
         onPriceUpdate(update.getSymbol(), update.getPrice());
     }
 
@@ -58,16 +54,16 @@ public class PriceMonitor {
     public void onPriceUpdate(String symbol, double currentPrice) {
         List<Deal> deals = symbolSubscribers.get(symbol);
         if (deals == null || deals.isEmpty()) {
-            LoggerUtils.logDebug("🔍 Нет активных сделок для: " + symbol);
+            LoggerUtils.debug("🔍 Нет активных сделок для: " + symbol);
             return;
         }
 
-        LoggerUtils.logInfo("🔄 Проверка " + deals.size() + " сделок по " + symbol + " при цене " + currentPrice);
+        LoggerUtils.info("🔄 Проверка " + deals.size() + " сделок по " + symbol + " при цене " + currentPrice);
 
         synchronized (deals) {
             for (Deal deal : deals) {
                 if (!deal.isActive()) {
-                    LoggerUtils.logDebug("⏭️ Сделка неактивна: " + deal.getSymbol());
+                    LoggerUtils.debug("⏭️ Сделка неактивна: " + deal.getSymbol());
                     continue;
                 }
 
@@ -75,7 +71,7 @@ public class PriceMonitor {
                 if (slUpdated) {
                     String message = String.format("✅ Стоп-лосс обновлён для %s: %.2f", symbol, deal.getStopLoss());
                     messageSender.send(deal.getChatId(), message);
-                    LoggerUtils.logInfo(message);
+                    LoggerUtils.info(message);
                 }
             }
         }

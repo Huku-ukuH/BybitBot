@@ -30,7 +30,7 @@ public class UserStorage {
             users.get(chatId).setAccessLevel(level);
             return;
         }
-        LoggerUtils.logWarn("Пользователь с таким chatId не найден");
+        LoggerUtils.warn("Пользователь с таким chatId не найден");
     }
 
     public synchronized boolean containsUser(long chatId) {

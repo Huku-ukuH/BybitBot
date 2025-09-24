@@ -42,14 +42,14 @@ public class BybitWebSocketClient {
             client = new WebSocketClient(new URI(WEBSOCKET_URI)) {
                 @Override
                 public void onOpen(ServerHandshake handshake) {
-                    LoggerUtils.logInfo("✅ Подключение к WebSocket Bybit установлено");
+                    LoggerUtils.info("✅ Подключение к WebSocket Bybit установлено");
                     resubscribeAll();
                 }
 
                 @Override
                 public void onMessage(String message) {
                     if (message.contains("op") && message.contains("success")) {
-                        LoggerUtils.logInfo("🟢 Подтверждение подписки: " + message);
+                        LoggerUtils.info("🟢 Подтверждение подписки: " + message);
                         return;
                     }
 
@@ -68,23 +68,23 @@ public class BybitWebSocketClient {
                             processTickerNode(dataNode);
                         }
                     } catch (Exception e) {
-                        LoggerUtils.logError("Ошибка парсинга WebSocket-сообщения: " + message, e);
+                        LoggerUtils.error("Ошибка парсинга WebSocket-сообщения: " + message, e);
                     }
                 }
 
                 @Override
                 public void onClose(int code, String reason, boolean remote) {
-                    LoggerUtils.logInfo("❌ Соединение WebSocket закрыто: " + reason + " (code: " + code + ")");
+                    LoggerUtils.info("❌ Соединение WebSocket закрыто: " + reason + " (code: " + code + ")");
                 }
 
                 @Override
                 public void onError(Exception ex) {
-                    LoggerUtils.logError("🚨 Ошибка WebSocket: " + ex.getMessage(), ex);
+                    LoggerUtils.error("🚨 Ошибка WebSocket: " + ex.getMessage(), ex);
                 }
             };
             client.connect();
         } catch (Exception e) {
-            LoggerUtils.logError("❌ Ошибка запуска WebSocket", e);
+            LoggerUtils.error("❌ Ошибка запуска WebSocket", e);
         }
     }
 
@@ -103,15 +103,15 @@ public class BybitWebSocketClient {
             messageHandler.accept(update);
 
         } catch (NumberFormatException e) {
-            LoggerUtils.logError("Некорректная цена в тикере: " + node, e);
+            LoggerUtils.error("Некорректная цена в тикере: " + node, e);
         } catch (Exception e) {
-            LoggerUtils.logError("Ошибка при обработке тикера: " + e.getMessage(), e);
+            LoggerUtils.error("Ошибка при обработке тикера: " + e.getMessage(), e);
         }
     }
 
     private void reconnectIfClosed() {
         if (client == null || !client.isOpen()) {
-            LoggerUtils.logInfo("🔄 Попытка переподключения к WebSocket...");
+            LoggerUtils.info("🔄 Попытка переподключения к WebSocket...");
             connectAsync();
         }
     }
@@ -120,7 +120,7 @@ public class BybitWebSocketClient {
         String sym = symbol.getSymbol();
         if (subscribedSymbols.add(sym)) { // true, если добавлен
             String topic = String.format("{\"op\": \"subscribe\", \"args\": [\"tickers.%s\"]}", sym);
-            LoggerUtils.logInfo("📡 Подписка на: " + sym);
+            LoggerUtils.info("📡 Подписка на: " + sym);
             sendAsync(topic);
         }
     }
@@ -129,7 +129,7 @@ public class BybitWebSocketClient {
         if (subscribedSymbols.remove(symbol)) {
             String topic = String.format("{\"op\": \"unsubscribe\", \"args\": [\"tickers.%s\"]}", symbol);
             sendAsync(topic);
-            LoggerUtils.logInfo("🚫 Отписка от: " + symbol);
+            LoggerUtils.info("🚫 Отписка от: " + symbol);
         }
     }
 
@@ -144,7 +144,7 @@ public class BybitWebSocketClient {
         }
         topic.append("]}");
         sendAsync(topic.toString());
-        LoggerUtils.logInfo("🔁 Восстановлены подписки: " + subscribedSymbols);
+        LoggerUtils.info("🔁 Восстановлены подписки: " + subscribedSymbols);
     }
 
     private void sendAsync(String message) {
@@ -160,7 +160,7 @@ public class BybitWebSocketClient {
             }
             scheduler.shutdown();
         } catch (Exception e) {
-            LoggerUtils.logError("Ошибка при отключении WebSocket", e);
+            LoggerUtils.error("Ошибка при отключении WebSocket", e);
         }
     }
 

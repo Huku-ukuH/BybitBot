@@ -76,12 +76,12 @@ public class Deal {
 
     public void setStrategyName(String strategyName) {
         if (strategyName == null || strategyName.isEmpty()) {
-            LoggerUtils.logWarn("Попытка установить пустое или null имя стратегии для сделки " + this.id + ". Игнорируется.");
+            LoggerUtils.warn("Попытка установить пустое или null имя стратегии для сделки " + this.id + ". Игнорируется.");
             return;
         }
         this.strategyName = strategyName.toLowerCase();
         this.strategy = null;
-        LoggerUtils.logDebug("Стратегия для сделки " + this.id + " установлена на: " + this.strategyName);
+        LoggerUtils.debug("Стратегия для сделки " + this.id + " установлена на: " + this.strategyName);
     }
     //Получает экземпляр стратегии, связанной с этой сделкой.
     public AbstractStrategy getStrategy() {
@@ -90,20 +90,20 @@ public class Deal {
                 this.strategy = StrategyFactory.getStrategy(this.strategyName);
 
             } catch (Exception e) { // Перехватываем общее исключение на случай проблем в фабрике
-                LoggerUtils.logError("Не удалось загрузить стратегию '" + strategyName + "' для сделки " + this.id + ". Попытка отката к 'ai'.", e);
+                LoggerUtils.error("Не удалось загрузить стратегию '" + strategyName + "' для сделки " + this.id + ". Попытка отката к 'ai'.", e);
 
                 // Попытка отката к стратегии по умолчанию
                 if (!"ai".equals(this.strategyName)) { // Избегаем бесконечной рекурсии
                     try {
                         this.strategyName = "ai";
                         this.strategy = StrategyFactory.getStrategy(this.strategyName);
-                        LoggerUtils.logWarn("Стратегия для сделки " + this.id + " откачена к 'ai'.");
+                        LoggerUtils.warn("Стратегия для сделки " + this.id + " откачена к 'ai'.");
                     } catch (Exception fallbackException) {
-                        LoggerUtils.logError("Критическая ошибка: Не удалось загрузить даже стратегию 'ai' для сделки " + this.id, fallbackException);
+                        LoggerUtils.error("Критическая ошибка: Не удалось загрузить даже стратегию 'ai' для сделки " + this.id, fallbackException);
                         throw new RuntimeException("Не удалось инициализировать стратегию для сделки " + this.id, fallbackException);
                     }
                 } else {
-                    LoggerUtils.logError("Критическая ошибка: Не удалось загрузить стратегию 'ai' для сделки " + this.id, e);
+                    LoggerUtils.error("Критическая ошибка: Не удалось загрузить стратегию 'ai' для сделки " + this.id, e);
                     throw new RuntimeException("Не удалось инициализировать стратегию 'ai' для сделки " + this.id, e);
                 }
             }
@@ -123,7 +123,7 @@ public class Deal {
 
     public void updateDealFromBybitPosition(PositionInfo positionInfo) {
         if (positionInfo == null) {
-            LoggerUtils.logInfo("Attempt to update deal with null PositionInfo");
+            LoggerUtils.info("Attempt to update deal with null PositionInfo");
             return;
         }
 
@@ -141,7 +141,7 @@ public class Deal {
         this.entryPrice = positionInfo.getAvgPrice();
         this.stopLoss = positionInfo.getStopLoss();
 
-        LoggerUtils.logInfo(
+        LoggerUtils.info(
                 "Deal updated from Bybit position:\n" +
                         "Leverage: " + oldLeverage + " → " + this.leverageUsed + "\n" +
                         "Position Size: " + oldPositionSize + " → " + this.positionSize + "\n" +
@@ -163,23 +163,23 @@ public class Deal {
      */
     public void recordExit(double exitPrice, double exitAmount) {
         if (!active) {
-            LoggerUtils.logWarn("Попытка записать выход для неактивной сделки " + this.id);
+            LoggerUtils.warn("Попытка записать выход для неактивной сделки " + this.id);
             return;
         }
         if (!takeProfits.contains(exitPrice)) {
-            LoggerUtils.logWarn("Попытка записать выход по неизвестному TP (" + exitPrice + ") для сделки " + this.id);
+            LoggerUtils.warn("Попытка записать выход по неизвестному TP (" + exitPrice + ") для сделки " + this.id);
             return;
         }
 
         ExitStep exit = new ExitStep(exitPrice, exitAmount);
         executedExits.add(exit);
-        LoggerUtils.logDebug("Зарегистрирован выход: цена=" + exitPrice + ", количество=" + exitAmount + " для сделки " + this.id);
+        LoggerUtils.debug("Зарегистрирован выход: цена=" + exitPrice + ", количество=" + exitAmount + " для сделки " + this.id);
 
         // Если все TP выполнены — сделка считается закрытой
         // Используем >= на случай, если выходов больше, чем TP (например, Market order закрыл всё)
         if (executedExits.size() >= takeProfits.size() && !takeProfits.isEmpty()) {
             this.active = false;
-            LoggerUtils.logInfo("Сделка " + this.id + " помечена как неактивная, так как все TP выполнены.");
+            LoggerUtils.info("Сделка " + this.id + " помечена как неактивная, так как все TP выполнены.");
         }
     }
 
@@ -200,7 +200,7 @@ public class Deal {
             }
         });
         int remaining = count.get();
-        LoggerUtils.logInfo("Оставшиеся TP для сделки " + this.id + ": " + remaining);
+        LoggerUtils.info("Оставшиеся TP для сделки " + this.id + ": " + remaining);
         return remaining;
     }
     public boolean isPositivePNL() {

@@ -54,7 +54,7 @@ public class RateLimiter { //класс подсчета запросов для
                     requestCount.set(0);
                     periodStart = now;
                     isPaused = false; // Сброс паузы при начале нового периода
-                    LoggerUtils.logDebug("RateLimiter: Новый период. Счетчик сброшен.");
+                    LoggerUtils.debug("RateLimiter: Новый период. Счетчик сброшен.");
                 }
             }
         }
@@ -63,14 +63,14 @@ public class RateLimiter { //класс подсчета запросов для
         pauseLock.lock();
         try {
             if (isPaused) {
-                LoggerUtils.logWarn("RateLimiter: Достигнут лимит. Ожидание " + pauseMillis + " мс перед следующим запросом...");
+                LoggerUtils.warn("RateLimiter: Достигнут лимит. Ожидание " + pauseMillis + " мс перед следующим запросом...");
                 Thread.sleep(pauseMillis);
                 // После паузы сбрасываем счетчик и период
                 synchronized (this) {
                     requestCount.set(0);
                     periodStart = System.currentTimeMillis();
                     isPaused = false;
-                    LoggerUtils.logInfo("RateLimiter: Пауза завершена. Счетчик сброшен.");
+                    LoggerUtils.info("RateLimiter: Пауза завершена. Счетчик сброшен.");
                 }
             }
         } finally {
@@ -87,22 +87,22 @@ public class RateLimiter { //класс подсчета запросов для
                 // Повторная проверка внутри блокировки, чтобы избежать множественных пауз
                 if (!isPaused) { // Если пауза еще не установлена другим потоком
                     isPaused = true;
-                    LoggerUtils.logInfo("RateLimiter: Превышен лимит запросов (" + maxRequests +
+                    LoggerUtils.info("RateLimiter: Превышен лимит запросов (" + maxRequests +
                             " за " + periodMillis + " мс). Установлена пауза на " + pauseMillis + " мс.");
                     // Пауза будет применена при следующем вызове acquire() или по истечении времени внутри acquire()
                     // Лучше сразу заснуть
-                    LoggerUtils.logWarn("RateLimiter: Начало паузы на " + pauseMillis + " мс...");
+                    LoggerUtils.warn("RateLimiter: Начало паузы на " + pauseMillis + " мс...");
                     Thread.sleep(pauseMillis);
                     synchronized (this) {
                         requestCount.set(0);
                         periodStart = System.currentTimeMillis();
                         isPaused = false;
-                        LoggerUtils.logInfo("RateLimiter: Пауза завершена. Счетчик сброшен.");
+                        LoggerUtils.info("RateLimiter: Пауза завершена. Счетчик сброшен.");
                     }
                 } else {
                     // Если пауза уже установлена другим потоком, текущий поток тоже должен подождать
                     // и сбросить счетчик после окончания паузы
-                    LoggerUtils.logDebug("RateLimiter: Поток ожидает окончания паузы, установленной другим потоком.");
+                    LoggerUtils.debug("RateLimiter: Поток ожидает окончания паузы, установленной другим потоком.");
                     Thread.sleep(pauseMillis); // Простое ожидание, счетчик будет сброшен первым потоком
                     // После ожидания, сбрасываем счетчик, если он еще не сброшен
                     synchronized (this) {
@@ -110,7 +110,7 @@ public class RateLimiter { //класс подсчета запросов для
                             requestCount.set(0);
                             periodStart = System.currentTimeMillis();
                             isPaused = false;
-                            LoggerUtils.logInfo("RateLimiter: Счетчик сброшен после ожидания паузы.");
+                            LoggerUtils.info("RateLimiter: Счетчик сброшен после ожидания паузы.");
                         }
                     }
                 }
@@ -119,6 +119,6 @@ public class RateLimiter { //класс подсчета запросов для
             }
         }
         // Если лимит не превышен, запрос разрешен
-        LoggerUtils.logDebug("RateLimiter: Запрос разрешен. Текущий счетчик: " + currentCount);
+        LoggerUtils.debug("RateLimiter: Запрос разрешен. Текущий счетчик: " + currentCount);
     }
 }

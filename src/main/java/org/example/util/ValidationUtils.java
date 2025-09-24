@@ -6,7 +6,7 @@ public class ValidationUtils {
     public static void checkNotNull(Object obj, String message) {
         if (obj == null) {
             IllegalArgumentException exception = new IllegalArgumentException(message);
-            LoggerUtils.logError(message, exception);
+            LoggerUtils.error(message, exception);
             throw exception;
         }
     }
@@ -14,21 +14,21 @@ public class ValidationUtils {
     public static void checkPositive(double value, String message) {
         if (value <= 0) {
             IllegalArgumentException exception = new IllegalArgumentException(message);
-            LoggerUtils.logError(message, exception);
+            LoggerUtils.error(message, exception);
             throw exception;        }
     }
 
     public static void checkNonNegative(double value, String message) {
         if (value < 0) {
             IllegalArgumentException exception = new IllegalArgumentException(message);
-            LoggerUtils.logError(message, exception);
+            LoggerUtils.error(message, exception);
             throw exception;        }
     }
 
     public static void checkTrue(boolean condition, String message) {
         if (!condition) {
             IllegalArgumentException exception = new IllegalArgumentException(message);
-            LoggerUtils.logError(message, exception);
+            LoggerUtils.error(message, exception);
             throw exception;        }
     }
 

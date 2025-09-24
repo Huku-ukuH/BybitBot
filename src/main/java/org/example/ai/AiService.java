@@ -10,7 +10,6 @@ import chat.giga.model.completion.ChatMessageRole;
 import chat.giga.model.completion.CompletionRequest;
 import chat.giga.model.completion.CompletionResponse;
 import io.github.cdimascio.dotenv.Dotenv;
-import org.checkerframework.checker.units.qual.A;
 import org.example.deal.dto.DealRequest;
 import org.example.util.JsonUtils;
 import org.example.util.LoggerUtils;
@@ -51,14 +50,14 @@ public class AiService {
 
             if (response.choices() != null && !response.choices().isEmpty()) {
                 String AiResponse = response.choices().get(0).message().content();
-                LoggerUtils.logInfo("ответ нйронки " + AiResponse);
+                LoggerUtils.info("ответ нйронки " + AiResponse);
                 return AiResponse;
             } else {
-                LoggerUtils.logInfo("❌❌❌❌❌ AI: Ответ ИИ пустой (choices пуст)❌❌❌❌❌");
+                LoggerUtils.info("❌❌❌❌❌ AI: Ответ ИИ пустой (choices пуст)❌❌❌❌❌");
                 throw new RuntimeException("AI вернул пустой ответ");
             }
         } catch (Exception e) {
-            LoggerUtils.logError("🚨 AI: Ошибка при обращении к ИИ", e);
+            LoggerUtils.error("🚨 AI: Ошибка при обращении к ИИ", e);
             throw new RuntimeException("Ошибка при обращении к ИИ: " + e.getMessage(), e);
         }
     }
@@ -93,7 +92,7 @@ public class AiService {
             return JsonUtils.fromJson(responseJson, DealRequest.class);
         } catch (Exception e) {
             String errorMsg = "❌ AI: Ошибка при парсинге сигнала. Ответ нейросети: " + (responseJson != null ? responseJson : "null");
-            LoggerUtils.logError(errorMsg, e);
+            LoggerUtils.error(errorMsg, e);
 
             // 🚀 Пробрасываем с контекстом
             throw new RuntimeException("Ошибка при обработке сигнала ИИ: " + e.getMessage() +
@@ -107,10 +106,10 @@ public class AiService {
     public String justChat(String messageText) {
         try {
             String response = sendPostRequest(messageText);
-            LoggerUtils.logDebug("🤖 ИИ: " + response);
+            LoggerUtils.debug("🤖 ИИ: " + response);
             return response;
         } catch (Exception e) {
-            LoggerUtils.logError("❌ AI: Ошибка в режиме чата", e);
+            LoggerUtils.error("❌ AI: Ошибка в режиме чата", e);
             return "Извините, произошла ошибка при общении с ИИ.";
         }
     }

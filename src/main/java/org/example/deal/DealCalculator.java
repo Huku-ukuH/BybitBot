@@ -21,7 +21,7 @@ public class DealCalculator {
     }
 
     public String calculate(Deal deal) {
-        LoggerUtils.logDebug("DealCalculator calculate - Начался рассчет " + deal.getSymbol());
+        LoggerUtils.debug("DealCalculator calculate - Начался рассчет " + deal.getSymbol());
         ValidationUtils.checkNotNull(deal, "Deal cannot be null");
         StrategyConfig strategyConfig;
         try {
@@ -34,7 +34,7 @@ public class DealCalculator {
                 strategyConfig = new StrategyConfig(); // если конфиг null создать умолчание
             }
         } catch (Exception e) {
-            LoggerUtils.logError("Ошибка получения конфига стратегии для сделки " + deal.getId(), e);
+            LoggerUtils.error("Ошибка получения конфига стратегии для сделки " + deal.getId(), e);
             strategyConfig = new StrategyConfig();
         }
 
@@ -43,7 +43,7 @@ public class DealCalculator {
                 ? deal.getStopLoss()
                 : getDefaultStopLoss(deal, strategyConfig);
         deal.setStopLoss(MathUtils.formatPrice(deal.getEntryPrice(), stopLoss));
-        LoggerUtils.logInfo("SL " + deal.getSymbol() + " = " + stopLoss);
+        LoggerUtils.info("SL " + deal.getSymbol() + " = " + stopLoss);
 
 
         // 2. Position size (и проверка minQty внутри)
@@ -64,7 +64,7 @@ public class DealCalculator {
             throw new IllegalStateException("\nНедостаточно средств. Нужно: " + requiredCapital + ", доступно: " + actualBalance);
         }
 
-        LoggerUtils.logDebug("DealCalculator calculate - Закончился рассчет " + deal.getSymbol());
+        LoggerUtils.debug("DealCalculator calculate - Закончился рассчет " + deal.getSymbol());
         return "QTY: " + MathUtils.formatPrice(0.01, positionSize) + "\n" +
                 "SL: " + MathUtils.formatPrice(deal.getEntryPrice(), deal.getStopLoss()) + "\n" +
                 "LV: " + leverageUsed + "x\n" +
@@ -76,7 +76,7 @@ public class DealCalculator {
     private double getDefaultStopLoss(Deal deal, StrategyConfig strategyConfig) {
         double entryPrice = deal.getEntryPrice();
         double slPercent = strategyConfig.getDefaultSlPercent(); // например, 0.20 → 20%
-        LoggerUtils.logDebug("getDefaultStopLoss Расчёт дефолтного SL:");
+        LoggerUtils.debug("getDefaultStopLoss Расчёт дефолтного SL:");
         double stopLoss;
         if (deal.getDirection() == Direction.LONG) {
             stopLoss = entryPrice * (1 - slPercent);
@@ -88,11 +88,11 @@ public class DealCalculator {
 
     // Используем параметр из strategyConfig
     private double calculatePositionSize(Deal deal, StrategyConfig strategyConfig, BybitMarketService bybitMarketService, double balance) {
-        LoggerUtils.logDebug("calculatePositionSize 🧮 Начало расчёта размера позиции");
+        LoggerUtils.debug("calculatePositionSize 🧮 Начало расчёта размера позиции");
 
         double delta = Math.abs(deal.getEntryPrice() - deal.getStopLoss());
         if (delta == 0) {
-            LoggerUtils.logInfo("❌❌❌❌❌ SL совпадает с ценой входа — деление на ноль!❌❌❌❌❌");
+            LoggerUtils.info("❌❌❌❌❌ SL совпадает с ценой входа — деление на ноль!❌❌❌❌❌");
             throw new IllegalArgumentException("SL == entryPrice (деление на ноль!)");
         }
 
@@ -104,7 +104,7 @@ public class DealCalculator {
         // Коррекция, если потенциальный убыток превышает лимит
         if (potentialLoss > maxLossUSD) {
             rawPositionSize = maxLossUSD / delta;
-            LoggerUtils.logInfo("potentialLoss > maxLossUSD \nКоррекция rawPositionSize = " + rawPositionSize);
+            LoggerUtils.info("potentialLoss > maxLossUSD \nКоррекция rawPositionSize = " + rawPositionSize);
         }
 
         // Округление по шагу лота
@@ -113,11 +113,11 @@ public class DealCalculator {
 
         // Проверка minQty
         if (roundedSize < minQty) {
-            LoggerUtils.logWarn("устанавливаем = minQty в размер позиции");
+            LoggerUtils.warn("устанавливаем = minQty в размер позиции");
             roundedSize = minQty;
         }
 
-        LoggerUtils.logInfo("📊 РАСЧЁТ РАЗМЕРА ПОЗИЦИИ (итог)" +
+        LoggerUtils.info("📊 РАСЧЁТ РАЗМЕРА ПОЗИЦИИ (итог)" +
                 "\nМакс. риск: " + maxLossPercent +
                 "%\nРазмер позиции: " + roundedSize +
                 "\nПотенциальный убыток: " + potentialLoss + " USDT");
@@ -161,26 +161,26 @@ public class DealCalculator {
 
         // 1. Рассчитываем "сырой" объём
         double rawQty = deal.getPositionSize() * exitPercentage / 100.0;
-        LoggerUtils.logDebug("DealCalculator.calculateExitQty: rawQty = " + rawQty + " (positionSize=" + deal.getPositionSize() + ", %=" + exitPercentage + ")");
+        LoggerUtils.debug("DealCalculator.calculateExitQty: rawQty = " + rawQty + " (positionSize=" + deal.getPositionSize() + ", %=" + exitPercentage + ")");
 
         // 2. Округляем по шагу лота
         double roundedQty = bybitMarketService.roundLotSize(deal.getSymbol().toString(), rawQty);
-        LoggerUtils.logDebug("DealCalculator.calculateExitQty: roundedQty = " + roundedQty);
+        LoggerUtils.debug("DealCalculator.calculateExitQty: roundedQty = " + roundedQty);
 
         // 3. Проверяем minQty
         double minQty = bybitMarketService.getMinOrderQty(deal.getSymbol().toString());
         if (roundedQty < minQty) {
-            LoggerUtils.logDebug("DealCalculator.calculateExitQty: roundedQty (" + roundedQty + ") < minQty (" + minQty + ") → return 0.0");
+            LoggerUtils.debug("DealCalculator.calculateExitQty: roundedQty (" + roundedQty + ") < minQty (" + minQty + ") → return 0.0");
             return 0.0;
         }
 
         // 4. Защита: не выходим больше, чем есть
         if (roundedQty > deal.getPositionSize()) {
-            LoggerUtils.logWarn("DealCalculator.calculateExitQty: exit qty (" + roundedQty + ") > position size (" + deal.getPositionSize() + ") → return 0.0");
+            LoggerUtils.warn("DealCalculator.calculateExitQty: exit qty (" + roundedQty + ") > position size (" + deal.getPositionSize() + ") → return 0.0");
             return 0.0;
         }
 
-        LoggerUtils.logDebug("DealCalculator.calculateExitQty: exit qty = " + roundedQty);
+        LoggerUtils.debug("DealCalculator.calculateExitQty: exit qty = " + roundedQty);
         return roundedQty;
     }
 }

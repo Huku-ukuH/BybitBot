@@ -53,7 +53,7 @@ public class BybitHttpClient {
         try {
             syncServerTime();
         } catch (IOException e) {
-            LoggerUtils.logError("Не удалось синхронизировать время с Bybit при старте", e);
+            LoggerUtils.error("Не удалось синхронизировать время с Bybit при старте", e);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt(); // Восстанавливаем статус прерывания
             throw new RuntimeException("Поток прерван во время синхронизации времени", e);
@@ -69,10 +69,10 @@ public class BybitHttpClient {
             try {
                 syncServerTime();
             } catch (IOException e) {
-                LoggerUtils.logError("Ошибка при периодической синхронизации времени с Bybit", e);
+                LoggerUtils.error("Ошибка при периодической синхронизации времени с Bybit", e);
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
-                LoggerUtils.logWarn("Поток синхронизации времени прерван.");
+                LoggerUtils.warn("Поток синхронизации времени прерван.");
                 throw new RuntimeException(e);
             }
         }, 120, 120, TimeUnit.MINUTES);
@@ -95,7 +95,7 @@ public class BybitHttpClient {
             String query = buildQueryString(queryParams);
             String url = authConfig.getBYBIT_API_BASE_URL() + endpoint + (query.isEmpty() ? "" : "?" + query);
 
-            LoggerUtils.logDebug("GET → endpoint: " + endpoint + ", queryParams: " + queryParams);
+            LoggerUtils.debug("GET → endpoint: " + endpoint + ", queryParams: " + queryParams);
 
             HttpRequest.Builder requestBuilder = HttpRequest.newBuilder()
                     .uri(URI.create(url))
@@ -106,13 +106,13 @@ public class BybitHttpClient {
             if (!isPublicMarketEndpoint) {
                 addApiKeyHeader(requestBuilder);
             } else {
-                LoggerUtils.logDebug("Запрос к публичному эндпоинту " + endpoint + ", заголовок X-BAPI-API-KEY не добавляется.");
+                LoggerUtils.debug("Запрос к публичному эндпоинту " + endpoint + ", заголовок X-BAPI-API-KEY не добавляется.");
             }
 
             HttpRequest request = requestBuilder.build();
 
             String body = sendRequestWithRateLimit(request);
-            LoggerUtils.logDebug("GET ← response: " + body);
+            LoggerUtils.debug("GET ← response: " + body);
 
             return JsonUtils.fromJson(body, responseType);
         } catch (Exception e) {
@@ -134,7 +134,7 @@ public class BybitHttpClient {
         try {
             String url = authConfig.getBYBIT_API_BASE_URL() + endpoint;
 
-            LoggerUtils.logDebug("POST → endpoint: " + endpoint + ", body: " + jsonBody);
+            LoggerUtils.debug("POST → endpoint: " + endpoint + ", body: " + jsonBody);
 
             HttpRequest.Builder requestBuilder = HttpRequest.newBuilder()
                     .uri(URI.create(url))
@@ -147,7 +147,7 @@ public class BybitHttpClient {
             HttpRequest request = requestBuilder.build();
 
             String body = sendRequestWithRateLimit(request);
-            LoggerUtils.logDebug("POST ← response: " + body);
+            LoggerUtils.debug("POST ← response: " + body);
 
             return JsonUtils.fromJson(body, responseType);
         } catch (Exception e) {
@@ -173,7 +173,7 @@ public class BybitHttpClient {
             String signaturePayload = timestamp + authConfig.getBYBIT_API_KEY() + recvWindow + jsonBody;
             String signature = BybitRequestUtils.generateSignature(authConfig.getBYBIT_API_SECRET(), signaturePayload);
 
-            LoggerUtils.logDebug("SIGNED POST → endpoint: " + endpoint + ", body: " + jsonBody);
+            LoggerUtils.debug("SIGNED POST → endpoint: " + endpoint + ", body: " + jsonBody);
 
             HttpRequest request = HttpRequest.newBuilder()
                     .uri(URI.create(authConfig.getBYBIT_API_BASE_URL() + endpoint))
@@ -186,7 +186,7 @@ public class BybitHttpClient {
                     .build();
 
             String body = sendRequestWithRateLimit(request);
-            LoggerUtils.logDebug("SIGNED POST ← response: " + body);
+            LoggerUtils.debug("SIGNED POST ← response: " + body);
 
             return JsonUtils.fromJson(body, responseType);
         } catch (Exception e) {
@@ -223,7 +223,7 @@ public class BybitHttpClient {
                     .build();
 
             String bodyResponse = sendRequestWithRateLimit(request);
-            LoggerUtils.logDebug("SIGNED GET → endpoint: " + endpoint + ", queryParams: " + queryParams +
+            LoggerUtils.debug("SIGNED GET → endpoint: " + endpoint + ", queryParams: " + queryParams +
                     "\nSIGNED GET ← response:" + bodyResponse);
 
             return JsonUtils.fromJson(bodyResponse, responseType);
@@ -295,7 +295,7 @@ public class BybitHttpClient {
                 this.timeOffset = serverTimeMs - localTime;
             }
 
-            LoggerUtils.logDebug("Синхронизация времени: server=" + serverTimeMs + " ms, local=" + localTime + " ms, offset=" + timeOffset + " ms");
+            LoggerUtils.debug("Синхронизация времени: server=" + serverTimeMs + " ms, local=" + localTime + " ms, offset=" + timeOffset + " ms");
         } catch (NumberFormatException e) {
             throw new IOException("Ошибка преобразования времени из строки", e);
         } catch (Exception e) {
@@ -318,7 +318,7 @@ public class BybitHttpClient {
             return response.body();
         } else {
             // Логируем полный запрос для отладки
-            LoggerUtils.logWarn("HTTP-запрос завершился ошибкой: " + request.method() + " " + request.uri() +
+            LoggerUtils.warn("HTTP-запрос завершился ошибкой: " + request.method() + " " + request.uri() +
                     " -> HTTP " + response.statusCode() + " - " + response.body());
             throw new RuntimeException("HTTP " + response.statusCode() + ": " + response.body());
         }
@@ -336,7 +336,7 @@ public class BybitHttpClient {
     private String sendRequestWithRateLimit(HttpRequest request) throws IOException, InterruptedException {
         // 1. Проверяем лимит перед отправкой
         rateLimiter.acquire();
-        LoggerUtils.logDebug("RateLimiter: Запрос разрешен. Отправка " + request.method() + " " + request.uri());
+        LoggerUtils.debug("RateLimiter: Запрос разрешен. Отправка " + request.method() + " " + request.uri());
 
         // 2. Отправляем запрос
         return sendRequest(request);
@@ -373,7 +373,7 @@ public class BybitHttpClient {
         if (apiKey != null && !apiKey.isEmpty()) {
             requestBuilder.header("X-BAPI-API-KEY", apiKey);
         } else {
-            LoggerUtils.logWarn("API ключ отсутствует или пуст. Заголовок X-BAPI-API-KEY не будет добавлен.");
+            LoggerUtils.warn("API ключ отсутствует или пуст. Заголовок X-BAPI-API-KEY не будет добавлен.");
         }
     }
 }

@@ -25,13 +25,13 @@ public class BybitOrderService {
             BybitOrderResponse response = bybitHttpClient.signedPost("/v5/order/create", jsonBody, BybitOrderResponse.class);
 
             if (!"OK".equalsIgnoreCase(response.getRetMsg())) {
-                LoggerUtils.logError(
+                LoggerUtils.error(
                         "Ошибка создания ордера: " + response,
                         new IllegalStateException("BybitHttpClient вернул статус retMsg: " + response.getRetMsg()));
                 return response;
             }
 
-            LoggerUtils.logInfo("BybitOrderResponse placeOrder()" + response);
+            LoggerUtils.info("BybitOrderResponse placeOrder()" + response);
             return response;
 
         } catch (Exception e) {
@@ -76,11 +76,11 @@ public class BybitOrderService {
             params.put("orderFilter", "StopOrder");
             params.put("category", "linear");
 
-            LoggerUtils.logInfo("BybitOrderResponse setStopLoss() SlRequest" + slRequest + "\n" + "params" + params);
+            LoggerUtils.info("BybitOrderResponse setStopLoss() SlRequest" + slRequest + "\n" + "params" + params);
             return bybitHttpClient.signedPost("/v5/order/create", JsonUtils.toJson(params), BybitOrderResponse.class);
 
         } catch (Exception e) {
-            LoggerUtils.logError("setStopLoss() Ошибка установки стоп-лосса: ", e);
+            LoggerUtils.error("setStopLoss() Ошибка установки стоп-лосса: ", e);
             throw new RuntimeException(e);
         }
     }
@@ -96,7 +96,7 @@ public class BybitOrderService {
             bybitHttpClient.signedPost("/v5/order/cancel", json, Void.class);
 
         } catch (Exception e) {
-            LoggerUtils.logError("Ошибка отмены ордера: ", e);
+            LoggerUtils.error("Ошибка отмены ордера: ", e);
         }
     }
     public String closeDeal(Deal deal) {
@@ -114,7 +114,7 @@ public class BybitOrderService {
                 try {
                     cancelOrder(deal, order.getOrderId());
                 } catch (Exception e) {
-                    LoggerUtils.logError("⚠️ Не удалось отменить ордер " + order.getOrderId(), e);
+                    LoggerUtils.error("⚠️ Не удалось отменить ордер " + order.getOrderId(), e);
                 }
             }
         }
