@@ -3,6 +3,7 @@ package org.example.deal;
 import lombok.Getter;
 import org.example.bybit.BybitManager;
 import org.example.bybit.service.BybitPositionTrackerService;
+import org.example.model.Direction;
 import org.example.monitor.dto.PositionInfo;
 import org.example.strategy.strategies.strategies.StrategyFactory;
 import org.example.util.JsonUtils;
@@ -23,14 +24,20 @@ public class UpdateManager {
     @Getter
     private boolean createDealsProcess = false;
 
-    // Для временного хранения новых позиций во время восстановления
     private List<PositionInfo> pendingNewPositions = new ArrayList<>();
     private int currentRestoreIndex = 0;
+    private final BybitManager bybitManager;
+    private  final  DealCalculator dealCalculator;
+
+    public UpdateManager(BybitManager bybitManager, DealCalculator dealCalculator) {
+        this.bybitManager = bybitManager;
+        this.dealCalculator = dealCalculator;
+    }
 
     /**
      * Основной метод обновления и восстановления сделок.
      */
-    public String updateDeals(BybitManager bybitManager, ActiveDealStore activeDealStore, long chatId, String strategyNameInput) throws IOException {
+    public String updateDeals(ActiveDealStore activeDealStore, long chatId, String strategyNameInput) throws IOException {
         // ШАГ 1: Если идёт процесс восстановления — передаём управление
         if (createDealsProcess) {
             return createNextDeal(strategyNameInput, activeDealStore, chatId, bybitManager);
@@ -48,7 +55,7 @@ public class UpdateManager {
         List<PositionInfo> newPositions = new ArrayList<>(exchangePositions); // копия для удаления
 
         for (Deal deal : activeDealStore.getAllDeals()) {
-            PositionInfo posOnExchange = findPosition(exchangePositions, deal.getSymbol().getSymbol());
+            PositionInfo posOnExchange = findPosition(exchangePositions, deal.getSymbol().toString());
 
             if (posOnExchange == null) {
                 // Сделка закрыта
@@ -100,8 +107,19 @@ public class UpdateManager {
         try {
             Deal restoredDeal = StrategyFactory.getStrategy(strategyName).createDeal(pos, chatId, strategyName);
             restoredDeal.setId(pos.getSymbol() + "_" + strategyName + "_" + System.currentTimeMillis());
-
             restoreOrderIds(restoredDeal, pos.getSymbol().toString(), bybitManager);
+
+
+            //если ордеров не обнаружено, значит их надо создать!
+            if (restoredDeal.getTakeProfits().isEmpty()) {
+                restoredDeal.getStrategy().setTP(restoredDeal, bybitManager);
+            }
+            if (restoredDeal.getStopLoss() == null || restoredDeal.getStopLoss() == 0) {
+                restoredDeal.setStopLoss(dealCalculator.getStopLossForUpdatePosition(restoredDeal, restoredDeal.getStrategy().getConfig()));
+                restoredDeal.getStrategy().setSL(restoredDeal, bybitManager);
+                restoreOrderIds(restoredDeal, pos.getSymbol().toString(), bybitManager);
+            }
+
             activeDealStore.addDeal(restoredDeal);
 
             StringBuilder result = new StringBuilder();
@@ -115,7 +133,7 @@ public class UpdateManager {
                 result.append("\n✅ Все сделки восстановлены.");
             }
 
-            LoggerUtils.info("✅ Восстановлена сделка: id=" + restoredDeal.getId() + ", TP orderId=" + restoredDeal.getTpOrderId() + ", SL orderId=" + restoredDeal.getSlOrderId());
+            LoggerUtils.info("✅ Восстановлена сделка: id=" + restoredDeal.bigDealToString() + ", TP orderId=" + restoredDeal.getTpOrderId() + ", SL orderId=" + restoredDeal.getSlOrderId());
 
             return result.toString();
 
@@ -128,13 +146,12 @@ public class UpdateManager {
     // --- Вспомогательные ---
     private PositionInfo findPosition(List<PositionInfo> positions, String symbol) {
         return positions.stream()
-                .filter(p -> p.getSymbol().equals(symbol))
+                .filter(p -> p.getSymbol().toString().equals(symbol))
                 .findFirst()
                 .orElse(null);
     }
 
     private String restoreOrderIds(Deal deal, String symbol, BybitManager bybitManager) {
-
         StringBuilder result = new StringBuilder();
         try {
             List<BybitPositionTrackerService.OrderInfo> orders = bybitManager.getBybitPositionTrackerService().getOrders(symbol);
@@ -145,48 +162,78 @@ public class UpdateManager {
             LoggerUtils.info("📥 ОРДЕРА " + symbol + ": " + JsonUtils.toJson(orders));
 
             for (BybitPositionTrackerService.OrderInfo order : orders) {
-
                 // Пропускаем, если не reduceOnly
                 if (!Boolean.TRUE.equals(order.getReduceOnly())) {
                     continue;
                 }
 
-                // Парсим triggerPrice
-                double triggerPrice;
-                try {
-                    triggerPrice = Double.parseDouble(order.getTriggerPrice());
-                } catch (NumberFormatException | NullPointerException e) {
-                    result.append("⚠️ Не удалось распарсить triggerPrice у ордера ").append(order.getOrderId()).append("\n");
-                    continue;
+                if (если ордер уже усть у сделки, пропустить и сказать что не обновлен)
+
+                // === 1. Обработка stop-ордеров (SL и trailing-stop) ===
+                if ("Stop".equals(order.getStopOrderType())) {
+                    // Проверяем наличие triggerPrice
+                    if (order.getTriggerPrice() == null || order.getTriggerPrice().isEmpty()) {
+                        continue;
+                    }
+
+                    double triggerPrice;
+                    try {
+                        triggerPrice = Double.parseDouble(order.getTriggerPrice());
+                    } catch (NumberFormatException e) {
+                        result.append("⚠️ Не удалось распарсить triggerPrice у stop-ордера ").append(order.getOrderId()).append("\n");
+                        continue;
+                    }
+
+                    // Определяем: SL или TP?
+                    boolean isStopLoss;
+                    if (deal.getDirection() == Direction.LONG) {
+                        isStopLoss = triggerPrice < deal.getEntryPrice().doubleValue();
+                    } else { // SHORT
+                        isStopLoss = triggerPrice > deal.getEntryPrice().doubleValue();
+                    }
+
+                    if (isStopLoss) {
+                        deal.addOrderId(new OrderManager(order.getOrderId(), OrderManager.OrderType.SL, triggerPrice));
+                        deal.setStopLoss(triggerPrice); // 🔥 КЛЮЧЕВОЙ МОМЕНТ!
+                        result.append("🔗 Привязан SL: ").append(order.getOrderId()).append(" -> ").append(triggerPrice).append("\n");
+                    } else {
+                        deal.addOrderId(new OrderManager(order.getOrderId(), OrderManager.OrderType.TP, triggerPrice));
+                        result.append("🔗 Привязан TP (stop): ").append(order.getOrderId()).append(" -> ").append(triggerPrice).append("\n");
+                    }
                 }
 
-                // Проверяем stopOrderType
-                if ("StopLoss".equals(order.getStopOrderType())) {
-                    deal.addOrderId(new OrderManager(
-                            order.getOrderId(),
-                            OrderManager.OrderType.SL,
-                            triggerPrice
-                    ));
-                    result.append("🔗 Привязан SL: ").append(order.getOrderId()).append(" -> ").append(triggerPrice).append("\n");
-                }
+                // === 2. Обработка обычных лимитных TP-ордеров (без triggerPrice) ===
+                else if ((order.getTriggerPrice() == null || order.getTriggerPrice().isEmpty())
+                        && order.getPrice() != null && !order.getPrice().isEmpty()) {
 
-                if ("TakeProfit".equals(order.getStopOrderType()) ||
-                        "PartialTakeProfit".equals(order.getStopOrderType())) {
-                    deal.addOrderId(new OrderManager(
-                            order.getOrderId(),
-                            OrderManager.OrderType.TP,
-                            triggerPrice
-                    ));
-                    result.append("🔗 Привязан TP: ").append(order.getOrderId()).append(" -> ").append(triggerPrice).append("\n");
+                    // Это может быть TP — проверим сторону
+                    boolean isTpOrder = false;
+                    if (deal.getDirection() == Direction.LONG && "Sell".equals(order.getSide())) {
+                        isTpOrder = true;
+                    } else if (deal.getDirection() == Direction.SHORT && "Buy".equals(order.getSide())) {
+                        isTpOrder = true;
+                    }
+
+                    if (isTpOrder) {
+                        try {
+                            double price = Double.parseDouble(order.getPrice());
+                            deal.addOrderId(new OrderManager(order.getOrderId(), OrderManager.OrderType.TP, price));
+                            result.append("🔗 Привязан TP (лимит): ").append(order.getOrderId()).append(" -> ").append(price).append("\n");
+                        } catch (NumberFormatException e) {
+                            result.append("⚠️ Не удалось распарсить цену TP у ордера ").append(order.getOrderId()).append("\n");
+                        }
+                    }
                 }
             }
 
         } catch (IOException e) {
             LoggerUtils.error("⚠️ Не удалось загрузить ордера с Bybit для символа " + symbol, e);
-        } catch (NumberFormatException e) {
-            LoggerUtils.error("❌ Ошибка парсинга цены при привязке TP/SL", e);
         }
         return result.toString();
+    }
+
+    public PositionInfo updateOneDeal(String symbol) {
+        return bybitManager.getBybitPositionTrackerService().getPositionBySymbol(symbol);
     }
 
 }

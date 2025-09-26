@@ -10,11 +10,13 @@ import org.example.monitor.dto.PositionInfo;
 import org.example.strategy.params.ExitPlan;
 import org.example.strategy.strategies.strategies.AbstractStrategy;
 import org.example.strategy.strategies.strategies.StrategyFactory;
+import org.example.util.EmojiUtils;
 import org.example.util.LoggerUtils;
 
 
 import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Collectors;
 
 @Getter
 @Setter
@@ -116,8 +118,11 @@ public class Deal {
     }
 
     public void addTakeProfit(double tp) {
+        if (takeProfits == null) {
+            takeProfits = new ArrayList<>();
+        }
         takeProfits.add(tp);
-
+        takeProfits.sort(Double::compareTo); // сортируем по возрастанию
     }
 
 
@@ -221,15 +226,24 @@ public class Deal {
     }
 
     public String bigDealToString() {
-        return id + "\n" + this + "QTY: " + positionSize + "\n" + "Риск: " + Math.round(getPositionSize() * Math.abs(entryPrice - stopLoss) * 1000.0) / 1000.0 + " $\n";
+        return id + "\n" + this +
+                "QTY: " + positionSize + "\n" +
+                "Риск: " + getRiscValue();
     }
 
-    public StringBuilder positiveDeal() {
-        StringBuilder sb = new StringBuilder(symbol + "\n");
-        sb.append(isPositivePNL()? "🛑" : "✅ БУ");
-        sb.append(positionInfo.toString());
-        return sb;
+    private String getRiscValue() {
+        if (isPositivePNL()) {
+            return " Потерять прибыль";
+        }
+        if (stopLoss == 0 && direction == Direction.LONG) {
+            return positionSize * entryPrice + " $ (не установлен SL)\n";
+        }
+        if (stopLoss == 0 && direction == Direction.SHORT) {
+            return EmojiUtils.ERROR + "НЕ ОГРАНИЧЕН!! (не установлен SL)\n";
+        }
+        return Math.round(positionSize * Math.abs(entryPrice - stopLoss) * 1000.0) / 1000.0 + " $\n";
     }
+
 
     public void addOrderId(OrderManager order) {
         this.ordersIdList.add(order);
@@ -257,27 +271,30 @@ public class Deal {
     /**
      * Возвращает orderId ордера Take Profit (TP), если он привязан.
      */
-    public String getTpOrderId() {
-        return getOrderIdByType(OrderManager.OrderType.TP);
+    public List<String> getTpOrderId() {
+        return getOrderIdsByType(OrderManager.OrderType.TP);
     }
 
     /**
      * Возвращает orderId ордера Stop Loss (SL), если он привязан.
      */
     public String getSlOrderId() {
-        return getOrderIdByType(OrderManager.OrderType.SL);
+        List<String> slIds = getOrderIdsByType(OrderManager.OrderType.SL);
+        return slIds.isEmpty() ? null : slIds.get(0);
     }
 
     /**
      * Внутренний метод поиска orderId по типу.
      */
-    private String getOrderIdByType(OrderManager.OrderType type) {
-        if (ordersIdList == null) return null;
+    private List<String> getOrderIdsByType(OrderManager.OrderType type) {
+        if (ordersIdList == null || ordersIdList.isEmpty()) {
+            return Collections.emptyList();
+        }
         return ordersIdList.stream()
                 .filter(order -> order.getOrderType() == type)
                 .map(OrderManager::getOrderId)
-                .findFirst()
-                .orElse(null);
+                .filter(Objects::nonNull) // на всякий случай
+                .collect(Collectors.toList());
     }
     // equals и hashCode можно добавить при необходимости, например, для хранения в Set
 }

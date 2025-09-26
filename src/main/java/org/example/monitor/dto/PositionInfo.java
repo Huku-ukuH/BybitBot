@@ -57,6 +57,7 @@ public class PositionInfo {
         }
         double initialMargin = positionValue / leverage;
         if (initialMargin == 0) return 0.0;
+
         return (unrealisedPnl / initialMargin) * 100.0;
     }
     public double getPotentialLoss() {

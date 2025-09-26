@@ -26,15 +26,18 @@ public class TradingBotApplication {
 
             PriceMonitor priceMonitor = new PriceMonitor(
                     tradingBot.getActiveDealStore(),
-                    tradingBot.getMessageSender(), tradingBot.getStopLossManager()
+                    tradingBot.getMessageSender(),
+                    tradingBot.getStopLossManager(),
+                    tradingBot.getUpdateManager()
             );
 
             // 🔥 Передаём ссылку на метод, принимающий PriceUpdate
-            BybitWebSocketClient webSocketClient = new BybitWebSocketClient(priceMonitor::handlePriceUpdate);
+            BybitWebSocketClient webSocketClient = new BybitWebSocketClient(priceMonitor::onPriceUpdate);
 
             priceMonitor.setWebSocketClient(webSocketClient);
             webSocketClient.connect();
             tradingBot.getActiveDealStore().addOnDealAddedListener(priceMonitor::subscribe);
+            tradingBot.getActiveDealStore().addOnDealRemovedListener(priceMonitor::unsubscribe);
 
             executor.submit(priceMonitor::startMonitoringAllDeals);
 

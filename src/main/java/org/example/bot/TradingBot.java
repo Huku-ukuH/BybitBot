@@ -5,6 +5,7 @@ import lombok.Getter;
 import org.example.ai.AiService;
 import org.example.bybit.BybitManager;
 import org.example.deal.ActiveDealStore;
+import org.example.deal.DealCalculator;
 import org.example.deal.UpdateManager;
 import org.example.strategy.params.StopLossManager;
 import org.example.strategy.strategies.strategies.StrategyFactory;
@@ -20,11 +21,11 @@ public class TradingBot extends TelegramLongPollingBot {
     private final AiService aiService = new AiService();
     private final UserStorage userStorage = new UserStorage();
     private final BybitManager bybitManager = new BybitManager();
-    private final UpdateManager updateManager = new UpdateManager();
     private final StopLossManager stopLossManager = new StopLossManager();
     private final ActiveDealStore activeDealStore = new ActiveDealStore();
     private final MessageSender messageSender = new MessageSender(this);
-    private final BotCommandHandler commandHandler = new BotCommandHandler( bybitManager, aiService, activeDealStore, messageSender, updateManager);
+    private final UpdateManager updateManager = new UpdateManager(bybitManager, new DealCalculator(bybitManager.getBybitAccountService(), bybitManager.getBybitMarketService()));
+    private final BotCommandHandler commandHandler = new BotCommandHandler(bybitManager, aiService, activeDealStore, messageSender, updateManager);
 
 
     public TradingBot() {

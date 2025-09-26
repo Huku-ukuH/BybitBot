@@ -1,15 +1,16 @@
 package org.example.strategy.strategies.strategies;
 
 import org.example.ai.AiService;
-import org.example.bybit.dto.TickerResponse;
 import org.example.bybit.service.BybitAccountService;
 import org.example.bybit.service.BybitMarketService;
 import org.example.deal.Deal;
 import org.example.deal.DealCalculator;
+import org.example.deal.UpdateManager;
 import org.example.deal.dto.DealValidationResult;
+import org.example.monitor.dto.PriceUpdate;
 import org.example.strategy.config.StrategyConfig;
-import org.example.strategy.dto.StrategyContext;
 import org.example.strategy.params.ExitPlan;
+import org.example.strategy.params.StopLossManager;
 
 public class FreeStrategy extends AbstractStrategy {
     public FreeStrategy() {
@@ -58,17 +59,17 @@ public class FreeStrategy extends AbstractStrategy {
     }
 
     @Override
-    public void onPriceUpdate(StrategyContext context, TickerResponse price) {
+    public void onPriceUpdate(Deal deal, PriceUpdate priceUpdate, UpdateManager updateManager, StopLossManager stopLossManager) {
         // TODO: своя логика, если требуется
     }
 
     @Override
-    public void onTakeProfitHit(StrategyContext context, double executedPrice) {
+    public void onTakeProfitHit(Deal deal,  double executedPrice) {
         // TODO: своя логика, если требуется
     }
 
     @Override
-    public void onStopLossHit(StrategyContext context) {
+    public void onStopLossHit(Deal deal) {
         // TODO: своя логика, если требуется
     }
 }

@@ -21,7 +21,6 @@ import java.util.function.Consumer;
 public class BybitWebSocketClient {
     private static final String WEBSOCKET_URI = Dotenv.load().get("WEBSOCKET_URI");
 
-    // Теперь принимает PriceUpdate, а не String
     private final Consumer<PriceUpdate> messageHandler;
 
     private WebSocketClient client;
@@ -91,7 +90,7 @@ public class BybitWebSocketClient {
     // Отдельный метод для обработки одного тикера
     private void processTickerNode(JsonNode node) {
         try {
-            String symbol = node.path("symbol").asText(null);
+            Symbol symbol = new Symbol(node.path("symbol").asText(null));
             String lastPriceStr = node.path("lastPrice").asText(null);
 
             if (symbol == null || lastPriceStr == null) return;

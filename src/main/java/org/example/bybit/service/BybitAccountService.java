@@ -11,7 +11,7 @@ import java.util.Objects;
 public class BybitAccountService {
     private final BybitHttpClient httpClient;
     @Getter
-    private double lastUsdtBalanceInfo;
+    private double lastTotalUSDTBalance;
     public BybitAccountService(BybitHttpClient httpClient) {
         this.httpClient = httpClient;
     }
@@ -25,7 +25,6 @@ public class BybitAccountService {
     public double getUsdtBalance() {
         String endpoint = "/v5/account/wallet-balance";
         Map<String, String> queryParams = Map.of("accountType", "unified");
-        // найти почему BalanceResponse(retCode=0, retMsg=invalid request
         BalanceResponse response = httpClient.signedGet(endpoint, queryParams, BalanceResponse.class);
 
         LoggerUtils.info(response.toString());
@@ -34,14 +33,17 @@ public class BybitAccountService {
             throw new RuntimeException("Пустой результат. Проверь accountType или доступ API.");
         }
 
-        // Получаем totalAvailableBalance из первого аккаунта (если нужно — добавь фильтрацию по accountType)
-        lastUsdtBalanceInfo = response.getResult().getList().stream()
-                .map(BalanceResponse.BalanceAccount::getTotalAvailableBalance)
+
+        LoggerUtils.info("BALANCE = " + response);
+
+        lastTotalUSDTBalance = response.getResult().getList().stream()
+                .map(BalanceResponse.BalanceAccount::getTotalEquity) // ✅
                 .filter(Objects::nonNull)
                 .mapToDouble(Double::parseDouble)
                 .findFirst()
-                .orElseThrow(() -> new RuntimeException("Поле totalAvailableBalance не найдено"));
-        return lastUsdtBalanceInfo;
+                .orElseThrow(() -> new RuntimeException("Поле totalEquity не найдено"));
+
+        return lastTotalUSDTBalance;
     }
 
 

@@ -80,6 +80,47 @@ public class BybitPositionTrackerService {
     }
 
 
+    /**
+     * Получает позицию по конкретному символу.
+     *
+     * @param symbol торговая пара, например "BTCUSDT"
+     * @return PositionInfo или null, если позиции нет
+     */
+    public PositionInfo getPositionBySymbol(String symbol) {
+        PositionInfo positionInfo = null;
+        try {
+            Map<String, String> params = Map.of(
+                    "category", "linear",
+                    "symbol", symbol  // ← ключевое отличие!
+            );
+
+            Object rawResponse = httpClient.signedGet("/v5/position/list", params, Object.class);
+            String jsonString = JsonUtils.toJson(rawResponse);
+            Map<String, Object> root = JsonUtils.fromJson(jsonString, Map.class);
+
+            if (!Integer.valueOf(0).equals(root.get("retCode"))) {
+                String errorMsg = (String) root.get("retMsg");
+                LoggerUtils.warn("Bybit ошибка в /v5/position/list для " + symbol + ": " + errorMsg);
+                return null;
+            }
+
+            Map<String, Object> result = (Map<String, Object>) root.get("result");
+            if (result == null) return null;
+
+            @SuppressWarnings("unchecked")
+            List<Map<String, Object>> list = (List<Map<String, Object>>) result.get("list");
+            if (list == null || list.isEmpty()) return null;
+
+            // Берём первую (и единственную) позицию
+            Map<String, Object> item = list.get(0);
+            String json = JsonUtils.toJson(item);
+            positionInfo = JsonUtils.fromJson(json, PositionInfo.class);
+
+        } catch (Exception e) {
+            LoggerUtils.error("Ошибка при получении позиции для символа " + symbol, e);
+        }
+        return positionInfo;
+    }
     //класс для получения ордеров, для создания новых сделок
 
     /**

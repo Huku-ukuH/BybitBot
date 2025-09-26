@@ -73,7 +73,7 @@ public class DealCalculator {
     }
 
 
-    private double getDefaultStopLoss(Deal deal, StrategyConfig strategyConfig) {
+    public double getDefaultStopLoss(Deal deal, StrategyConfig strategyConfig) {
         double entryPrice = deal.getEntryPrice();
         double slPercent = strategyConfig.getDefaultSlPercent(); // например, 0.20 → 20%
         LoggerUtils.debug("getDefaultStopLoss Расчёт дефолтного SL:");
@@ -83,6 +83,51 @@ public class DealCalculator {
         } else {
             stopLoss = entryPrice * (1 + slPercent);
         }
+        return stopLoss;
+    }
+
+    public double getStopLossForUpdatePosition(Deal deal, StrategyConfig strategyConfig) {
+        // 1. Получаем данные
+        double entryPrice = deal.getEntryPrice();
+        double positionSize = deal.getPositionSize();
+        Direction direction = deal.getDirection();
+        double balance = accountService.getUsdtBalance();
+
+        // 2. Валидация
+        if (positionSize <= 0) {
+            throw new IllegalArgumentException("Размер позиции должен быть > 0");
+        }
+        if (entryPrice <= 0) {
+            throw new IllegalArgumentException("Цена входа некорректна: " + entryPrice);
+        }
+
+        // 3. Рассчитываем допустимый убыток в USD
+        double maxLossPercent = strategyConfig.getMaxLossPrecen(); // например, 1.0 = 1%
+        double maxLossUSD = balance * (maxLossPercent / 100.0);
+
+        // 4. Рассчитываем максимально допустимое расстояние до стопа
+        double delta = maxLossUSD / positionSize;
+
+        // 5. Определяем стоп в зависимости от направления
+        double stopLoss;
+        if (direction == Direction.LONG) {
+            stopLoss = entryPrice - delta;
+        } else if (direction == Direction.SHORT) {
+            stopLoss = entryPrice + delta;
+        } else {
+            throw new IllegalStateException("Неизвестное направление: " + direction);
+        }
+
+        // 6. Округляем по шагу цены (если нужно)
+        stopLoss = MathUtils.formatPrice(deal.getEntryPrice(), stopLoss);
+
+        LoggerUtils.debug(
+                "Рассчитан стоп-лосс для обновления: " +
+                        "entry=" + entryPrice + ", posSize=" + positionSize +
+                        ", maxLoss%=" + maxLossPercent + ", maxLossUSD=" + maxLossUSD +
+                        ", delta=" + delta + ", stopLoss=" + stopLoss
+        );
+
         return stopLoss;
     }
 

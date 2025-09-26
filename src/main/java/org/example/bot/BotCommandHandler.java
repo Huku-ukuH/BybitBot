@@ -266,14 +266,11 @@ public class BotCommandHandler {
     }
 
 
-         // todo: ПРОДОЛЖАТЬ ОТСЮДА
-        //метод обновления, а точнее метод восстановления сделок после перезагрузки бота,
-        // но пока это просто метод для обновления информации о сделках
     private void handleUpdateDeals(long chatId, String strategyName) {
        try {
            if (updateManager.isCreateDealsProcess()) {
                // Это ответ пользователя на запрос стратегии
-               String result = updateManager.updateDeals(bybitManager, activeDealStore, chatId, strategyName);
+               String result = updateManager.updateDeals(activeDealStore, chatId, strategyName);
                if (updateManager.isCreateDealsProcess()) {
                    messageSender.sendWithButtons(chatId, result, StrategyFactory.getAvailableStrategies());
                    return;
@@ -284,7 +281,7 @@ public class BotCommandHandler {
            }
 
             // Первый вызов /update — просто синхронизация
-            String result = updateManager.updateDeals(bybitManager, activeDealStore, chatId, "");
+            String result = updateManager.updateDeals(activeDealStore, chatId, "");
             if (updateManager.isCreateDealsProcess()) {
                 messageSender.sendWithButtons(chatId, result, StrategyFactory.getAvailableStrategies());
             } else {
