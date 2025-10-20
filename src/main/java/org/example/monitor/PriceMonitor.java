@@ -3,11 +3,12 @@
 package org.example.monitor;
 
 import lombok.Data;
+import org.example.bybit.BybitManager;
 import org.example.bybit.client.BybitWebSocketClient;
 import org.example.bot.MessageSender;
 import org.example.deal.ActiveDealStore;
 import org.example.deal.Deal;
-import org.example.deal.UpdateManager;
+import org.example.update.UpdateManager;
 import org.example.monitor.dto.PriceUpdate;
 import org.example.strategy.params.StopLossManager;
 import org.example.util.LoggerUtils;
@@ -24,18 +25,21 @@ public class PriceMonitor {
     private final StopLossManager stopLossManager;
     private final MessageSender messageSender;
     private final UpdateManager updateManager;
+    private final BybitManager bybitManager;
     private final Map<String, List<Deal>> symbolSubscribers = new ConcurrentHashMap<>();
 
     public PriceMonitor(ActiveDealStore activeDealStore,
                         MessageSender messageSender,
                         StopLossManager stopLossManager,
-                        UpdateManager updateManager)
+                        UpdateManager updateManager,
+                        BybitManager bybitManager)
 
     {
         this.activeDealStore = activeDealStore;
         this.messageSender = messageSender;
         this.stopLossManager = stopLossManager;
         this.updateManager = updateManager;
+        this.bybitManager = bybitManager;
     }
 
 
@@ -70,7 +74,7 @@ public class PriceMonitor {
         }
 
         for (Deal deal : deals) {
-            deal.getStrategy().onPriceUpdate(deal, update, updateManager, stopLossManager);
+            deal.getStrategy().onPriceUpdate(deal, update, updateManager, stopLossManager, bybitManager);
         }
 
     }

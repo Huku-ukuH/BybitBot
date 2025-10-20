@@ -5,6 +5,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Getter;
 import lombok.Setter;
 import org.example.bybit.client.BybitHttpClient;
+import org.example.model.Symbol;
 import org.example.monitor.dto.PositionInfo;
 import org.example.util.JsonUtils;
 import org.example.util.LoggerUtils;
@@ -134,7 +135,7 @@ public class BybitPositionTrackerService {
         private String orderId;
 
         @JsonProperty("symbol")
-        private String symbol;
+        private Symbol symbol;
 
         @JsonProperty("side")
         private String side;
@@ -240,4 +241,52 @@ public class BybitPositionTrackerService {
             throw new IOException("Не удалось получить список ордеров", e);
         }
     }
+
+    public List<OrderInfo> getOrdersBySettleCoin(String settleCoin) throws IOException {
+        try {
+            Map<String, String> params = new HashMap<>();
+            params.put("category", "linear");
+            params.put("settleCoin", settleCoin); // ← ключевой параметр: все USDT-ордера
+
+            Object rawResponse = httpClient.signedGet("/v5/order/realtime", params, Object.class);
+            String jsonString = JsonUtils.toJson(rawResponse);
+            Map<String, Object> root = JsonUtils.fromJson(jsonString, Map.class);
+
+            if (!Integer.valueOf(0).equals(root.get("retCode"))) {
+                String errorMsg = (String) root.getOrDefault("retMsg", "Unknown error");
+                LoggerUtils.warn("Bybit вернул ошибку в /v5/order/realtime?settleCoin=" + settleCoin + ": " + errorMsg);
+                return Collections.emptyList();
+            }
+
+            Map<String, Object> result = (Map<String, Object>) root.get("result");
+            if (result == null || result.get("list") == null) {
+                return Collections.emptyList();
+            }
+
+            @SuppressWarnings("unchecked")
+            List<Map<String, Object>> list = (List<Map<String, Object>>) result.get("list");
+            if (list.isEmpty()) {
+                LoggerUtils.debug("Нет активных ордеров для settleCoin=" + settleCoin);
+                return Collections.emptyList();
+            }
+
+            return list.stream()
+                    .map(item -> {
+                        try {
+                            String json = JsonUtils.toJson(item);
+                            return JsonUtils.fromJson(json, OrderInfo.class);
+                        } catch (Exception e) {
+                            LoggerUtils.error("Ошибка конвертации ордера из JSON: " + item, e);
+                            return null;
+                        }
+                    })
+                    .filter(Objects::nonNull)
+                    .collect(Collectors.toList());
+
+        } catch (Exception e) {
+            LoggerUtils.error("Ошибка при получении ордеров по settleCoin=" + settleCoin, e);
+            throw new IOException("Не удалось получить список ордеров", e);
+        }
+    }
 }
+

@@ -1,4 +1,4 @@
-package org.example.strategy.strategies.strategies;
+package org.example.strategy.strategies.strategies.superStrategy;
 
 import org.example.ai.AiService;
 import org.example.bybit.BybitManager;
@@ -7,10 +7,13 @@ import org.example.bybit.dto.BybitOrderResponse;
 import org.example.bybit.service.BybitAccountService;
 import org.example.bybit.service.BybitMarketService;
 import org.example.bybit.service.BybitOrderService;
+import org.example.bybit.service.BybitPositionTrackerService;
 import org.example.deal.Deal;
 import org.example.deal.DealCalculator;
 import org.example.deal.DealValidator;
-import org.example.deal.UpdateManager;
+import org.example.model.Symbol;
+import org.example.strategy.strategies.strategies.TradingStrategy;
+import org.example.update.UpdateManager;
 import org.example.deal.dto.DealRequest;
 import org.example.deal.dto.DealValidationResult;
 import org.example.model.EntryType;
@@ -47,7 +50,7 @@ public abstract class AbstractStrategy implements TradingStrategy {
      * @param aiService может быть null, если deal создается НЕ из handleGetSignal"
      */
     @Override
-    public Deal createDeal(AiService aiService, String messageText, long chatId, String strategyName) {
+    public Deal createDealBySignal(AiService aiService, String messageText, long chatId, String strategyName) {
         LoggerUtils.debug("Создание сделки по сигналу: " + messageText);
         try {
             DealRequest request = aiService.parseSignal(messageText);
@@ -61,29 +64,44 @@ public abstract class AbstractStrategy implements TradingStrategy {
         }
     }
 
-    @Override
-    public Deal createDeal(PositionInfo positionInfo, long chatId, String strategyName) {
+    public Deal createDealByUpdate(PositionInfo positionInfo, long chatId, String strategyName) {
         LoggerUtils.debug("Создание сделки по существующей позиции: " + positionInfo.getSymbol());
 
         DealRequest request = new DealRequest();
-        request.setSymbol(positionInfo.getSymbol());
+        request.setSymbol(new Symbol(positionInfo.getSymbol()));
         request.setDirection(positionInfo.getSide());
         request.setEntryType(EntryType.MARKET);
         request.setEntryPrice(positionInfo.getAvgPrice());
-        request.setStopLoss(positionInfo.getStopLoss());
         request.setTakeProfits(new ArrayList<>());
 
         Deal deal = new Deal(request);
         deal.setChatId(chatId);
         deal.setStrategyName(strategyName);
-        deal.setPositionInfo(positionInfo);
-        deal.updateDealFromBybitPosition(positionInfo);
+        deal.setPositionSize(positionInfo.getSize());
+        deal.setActive(true);
 
-
-
-        LoggerUtils.debug("Создана новая сделка по позиции!" + deal.bigDealToString());
+        LoggerUtils.debug("Создана новая сделка по позиции!" + deal.getSymbol().toString());
         return deal;
     }
+    public Deal createDealByUpdate(BybitPositionTrackerService.OrderInfo limitOrder, long chatId, String strategyName) {
+        LoggerUtils.debug("Создание сделки по лимитному ордеру: " + limitOrder.getSymbol());
+
+        DealRequest request = new DealRequest();
+        request.setSymbol(limitOrder.getSymbol());
+        request.setDirection(Direction.fromString(limitOrder.getSide()));
+        request.setEntryType(EntryType.MARKET);
+        request.setEntryPrice(Double.valueOf(limitOrder.getPrice()));
+        request.setTakeProfits(new ArrayList<>());
+
+        Deal deal = new Deal(request);
+        deal.setChatId(chatId);
+        deal.setStrategyName(strategyName);
+        deal.setPositionSize(Double.parseDouble(limitOrder.getQty()));
+
+        LoggerUtils.debug("Создана новая сделка по позиции!" + deal.getSymbol().toString());
+        return deal;
+    }
+
 
     public DealValidationResult validateDeal(Deal deal, BybitMarketService marketService) { return new DealValidator().validate(deal, marketService); }
     public String calculateDeal (Deal deal, DealCalculator dealCalculator) {
@@ -121,14 +139,29 @@ public abstract class AbstractStrategy implements TradingStrategy {
             throw new RuntimeException("❌ Ошибка при выставлении ордера для символа " + deal.getSymbol(), e);
         }
     }
+
     public String goIfDealOpen(Deal deal, BybitManager bybitManager) {
         return setSL(deal, bybitManager) + "\n" + setTP(deal, bybitManager);
     }
 
     public String setSL(Deal deal, BybitManager bybitManager){
         // Устанавливаем стоп-лосс
-        String result;
+        String result = "";
         try {
+
+            double currentPrice = bybitManager.getBybitMarketService().getLastPrice(deal.getSymbol().toString());
+            Direction dir = deal.getDirection();
+
+
+            LoggerUtils.info("!!!!!!!!!!!!!!!!SetSL mrthod. Dral SL = " + deal.getStopLoss() + "CMP = " + currentPrice);
+
+
+            boolean isInvalidSL = (dir == Direction.SHORT && currentPrice >= deal.getStopLoss()) ||
+                    (dir == Direction.LONG  && currentPrice <= deal.getStopLoss());
+            if (isInvalidSL) {
+                return "⚠️ Уровень SL (" + deal.getStopLoss() + ") уже пройден текущей ценой (" + currentPrice + ").";
+            }
+
             BybitOrderResponse slResponse = bybitManager.getBybitOrderService().setStopLoss(deal);
             String retMsg = slResponse.getRetMsg();
 
@@ -140,10 +173,12 @@ public abstract class AbstractStrategy implements TradingStrategy {
             result = "✅ Стоп-лосс установлен для " + deal.getSymbol() + ": " + deal.getStopLoss();
             LoggerUtils.info(result);
         } catch (Exception e) {
-            throw new RuntimeException("❌ Ошибка при установке SL для символа " + deal.getSymbol(), e);
+            throw new RuntimeException("❌ Ошибка при установке SL для символа " + deal.getSymbol() + "результат :" + result, e);
         }
         return result;
     }
+
+
     public String setTP(Deal deal, BybitManager bybitManager) {
         // Устанавливаем TP через ExitPlan
         try {
@@ -165,6 +200,8 @@ public abstract class AbstractStrategy implements TradingStrategy {
             throw new RuntimeException("❌ Ошибка при установке TP для символа " + deal.getSymbol(), e);
         }
     }
+
+
     public ExitPlan planExit(Deal deal) {
         try {
             LoggerUtils.info("🔍 " + getClass().getSimpleName() + ": Начало сделки " + deal.getId());
@@ -210,6 +247,8 @@ public abstract class AbstractStrategy implements TradingStrategy {
             return null;
         }
     }
+
+
     public double RiskUpdate(BybitAccountService bybitAccountService) {
         double updateLoss = bybitAccountService.getUsdtBalance() / 100 * ValuesUtil.getDefaultLossPrecent();
         this.config = new StrategyConfig(
@@ -230,12 +269,25 @@ public abstract class AbstractStrategy implements TradingStrategy {
     public StrategyConfig getConfig() {
         return config;
     }
-    @Override
-    public void onPriceUpdate(Deal deal, PriceUpdate priceUpdate, UpdateManager updateManager, StopLossManager stopLossManager) {
 
-        if (deal == null || !deal.isActive()) {
+
+    @Override
+    public void onPriceUpdate(Deal deal, PriceUpdate priceUpdate, UpdateManager updateManager, StopLossManager stopLossManager, BybitManager bybitManager) {
+        if (deal == null) {
+            LoggerUtils.warn("Straregy - onPriceUpdate - Deal is null");
             return;
         }
+
+        if (!deal.isActive()) {
+            LoggerUtils.info("Цена пересекла тейк пока сделка была неактивна - закрыть сделку!!! ");
+            //Если цена пересекла тейк пока сделка была неактивна - закрыть сделку
+            if (deal.getTakeProfits().get(0) < priceUpdate.getPrice()) {
+                bybitManager.getBybitOrderService().closeDeal(deal);
+            }
+            return;
+        }
+
+
         double entryPrice = deal.getEntryPrice();
         Direction direction = deal.getDirection();
         double currentPrice = priceUpdate.getPrice();
@@ -254,7 +306,7 @@ public abstract class AbstractStrategy implements TradingStrategy {
         deal.setPositivePnL(pnlPercent > 0);
 
 
-        LoggerUtils.debug(deal.getStrategy() + "-" + deal.getSymbol() + ": PnL = " + String.format("%.2f", pnlPercent) + "%");
+        LoggerUtils.debug(deal.getStrategy() + "-" + deal.getSymbol() + ": PnL = " + String.format("%.2f", pnlPercent * deal.getLeverageUsed()) + "%");
 
         // Получаем правила выхода по PnL из конфига стратегии
         Map<Double, Integer> pnlRules = config.getPnlTpExitRules();

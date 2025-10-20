@@ -6,7 +6,7 @@ import org.example.ai.AiService;
 import org.example.bybit.BybitManager;
 import org.example.deal.ActiveDealStore;
 import org.example.deal.DealCalculator;
-import org.example.deal.UpdateManager;
+import org.example.update.UpdateManager;
 import org.example.strategy.params.StopLossManager;
 import org.example.strategy.strategies.strategies.StrategyFactory;
 import org.example.util.LoggerUtils;

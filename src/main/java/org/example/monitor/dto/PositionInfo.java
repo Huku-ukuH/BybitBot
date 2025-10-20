@@ -18,7 +18,7 @@ import org.example.util.LoggerUtils;
 public class PositionInfo {
 
     @JsonProperty("symbol")
-    private Symbol symbol;
+    private String symbol;
     @JsonProperty("side")
     private Direction side;
     @JsonProperty("size")
@@ -39,10 +39,6 @@ public class PositionInfo {
     private String positionStatus;       //Статус позиции: "Normal", "Liq" (ликвидация), "Adl" (ADL), "Closed"
     @JsonProperty("bustPrice")
     private double bustPrice;            //цена ликвидации
-    @JsonProperty("stopLoss")
-    private double stopLoss;
-    @JsonProperty("takeProfit")
-    private double takeProfit;
     @JsonProperty("trailingStop")
     private double trailingStop;
     @JsonProperty("isolatedMargin")
@@ -50,24 +46,9 @@ public class PositionInfo {
 
 
 
-    // --- Дополнительные удобные методы ---
-    public double getRoi() {
-        if (leverage == 0 || positionValue == 0) {
-            return 0.0;
-        }
-        double initialMargin = positionValue / leverage;
-        if (initialMargin == 0) return 0.0;
-
-        return (unrealisedPnl / initialMargin) * 100.0;
-    }
-    public double getPotentialLoss() {
-        return Math.round(size * Math.abs(avgPrice - stopLoss) * 1000.0) / 1000.0;
-    }
-
-
     @Override
     public String toString() {
-//        LoggerUtils.logInfo("ПОЛНАЯ ИНФОРМАЦИЯ О ПОЗИЦИИ С БАЙБИТ \nPositionInfo{" +
+//        LoggerUtils.info("ПОЛНАЯ ИНФОРМАЦИЯ О ПОЗИЦИИ С БАЙБИТ \nPositionInfo{" +
 //                "symbol='" + symbol + '\'' +
 //                ", side='" + side + '\'' +
 //                ", size=" + size +
@@ -88,8 +69,6 @@ public class PositionInfo {
          return "\nUnrealisedPnl = " + unrealisedPnl +
                 "\nrealisedPnl = " + realizedPnl +
                 "\nbustPrice:" + bustPrice +
-                "\nisolatedMargin=" + isolatedMargin  +
-                "\npotentialLoss:" + getPotentialLoss() +
-                 "\nROI" + getRoi() ;
+                "\nisolatedMargin=" + isolatedMargin;
     }
 }

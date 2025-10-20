@@ -43,18 +43,13 @@ public class MessageSender {
 
         try {
             bot.execute(message);
-            LoggerUtils.info(EmojiUtils.ROBO + "(" + chatId + "): " + truncate(msg));
+            LoggerUtils.info(EmojiUtils.ROBO + "(" + chatId + "): " + msg);
         } catch (TelegramApiException e) {
             LoggerUtils.error("Не удалось отправить сообщение в Telegram", e);
             // НЕ делай e.printStackTrace() — логгер уже всё записал
         }
     }
 
-    // Полезно для длинных сообщений
-    private String truncate(String str) {
-        int maxLenght = 100;
-        return str.length() <= maxLenght ? str : str.substring(0, maxLenght) + "...";
-    }
 
     // Предупреждение пользователю + лог
     public void sendWarn(long chatId, String msg, String context) {

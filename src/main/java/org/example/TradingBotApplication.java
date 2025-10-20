@@ -28,7 +28,8 @@ public class TradingBotApplication {
                     tradingBot.getActiveDealStore(),
                     tradingBot.getMessageSender(),
                     tradingBot.getStopLossManager(),
-                    tradingBot.getUpdateManager()
+                    tradingBot.getUpdateManager(),
+                    tradingBot.getBybitManager()
             );
 
             // 🔥 Передаём ссылку на метод, принимающий PriceUpdate

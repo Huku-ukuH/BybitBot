@@ -7,7 +7,7 @@ import org.example.bybit.BybitManager;
 import org.example.deal.ActiveDealStore;
 import org.example.deal.Deal;
 import org.example.deal.DealCalculator;
-import org.example.deal.UpdateManager;
+import org.example.update.UpdateManager;
 import org.example.deal.dto.DealRequest;
 import org.example.deal.dto.DealValidationResult;
 import org.example.model.Direction;
@@ -33,7 +33,6 @@ public class BotCommandHandler {
     private final AiService aiService;
     private boolean justChat = false;
     private DealRequest dealRequest;
-    private String currentDealId;
     private Deal deal;
     // -----------------
 
@@ -86,11 +85,9 @@ public class BotCommandHandler {
            messageSender.send(chatId, bybitManager.getBybitOrderService().closeDeal(deal));
 
         }
-        if (currentDealId != null) {
-            activeDealStore.removeDeal(currentDealId);
-            LoggerUtils.info("cycleBreak(): сделка " + (deal != null ? deal.getId() : "null") + " удалена из activeDealStore");
-        }
-        currentDealId = null;
+
+        activeDealStore.removeDeal(deal.getId());
+        LoggerUtils.info("cycleBreak(): сделка " + (deal != null ? deal.getId() : "null") + " удалена из activeDealStore");
         deal = null;
     }
 
@@ -114,19 +111,18 @@ public class BotCommandHandler {
             return;
         }
 
-        Deal createdDeal = null;
+        Deal createdDeal;
 
         // Попытка 1
         try {
-            createdDeal = StrategyFactory.getStrategy(strategyName)
-                    .createDeal(aiService, messageText, chatId, strategyName);
+            createdDeal = StrategyFactory.getStrategy(strategyName).createDealBySignal(aiService, messageText, chatId, strategyName);
         } catch (Exception firstAttemptEx) {
             LoggerUtils.warn("Первая попытка createDeal провалилась. Повтор...");
 
             // Попытка 2 — только если причина в ИИ/парсинге, а не в фатальных ошибках
             try {
                 createdDeal = StrategyFactory.getStrategy(strategyName)
-                        .createDeal(aiService, messageText, chatId, strategyName);
+                        .createDealBySignal(aiService, messageText, chatId, strategyName);
             } catch (Exception secondAttemptEx) {
                 // Обе попытки провалились
                 String errorMsg = "Не удалось обработать сигнал после двух попыток";
@@ -140,7 +136,6 @@ public class BotCommandHandler {
 
         // Если хотя бы одна попытка прошла успешно
         deal = createdDeal;
-        currentDealId = deal.getId();
         messageSender.send(chatId, deal.toString());
         LoggerUtils.info("Сделка создана успешно");
         waitingSignal = false;
@@ -195,7 +190,6 @@ public class BotCommandHandler {
 
         try {
             if (deal.getStrategy().openDeal(bybitManager.getBybitOrderService(), deal)) {
-                currentDealId = deal.getId();
                 activeDealStore.addDeal(deal);
 
                 if (deal.getEntryType() == EntryType.MARKET) {
@@ -207,13 +201,7 @@ public class BotCommandHandler {
                         cycleBreak(chatId);
                         return;
                     }
-
-                    messageSender.send(
-                            chatId,
-                            EmojiUtils.OKAY + " Сделка открыта!\n" +
-                                    deal.bigDealToString() + "\n" +
-                                    result
-                    );
+                    messageSender.send(chatId, EmojiUtils.OKAY + " Сделка открыта!\n" + deal.bigDealToString() + "\n" + result);
                 } else {
                     messageSender.send(chatId, "🕒 Лимитный ордер выставлен. Ожидаем вход...");
                 }
@@ -275,7 +263,6 @@ public class BotCommandHandler {
                    messageSender.sendWithButtons(chatId, result, StrategyFactory.getAvailableStrategies());
                    return;
                }
-
                messageSender.sendAndClearButtons(chatId, result);
                return;
            }

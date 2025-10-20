@@ -88,28 +88,26 @@ public class DealCalculator {
 
     public double getStopLossForUpdatePosition(Deal deal, StrategyConfig strategyConfig) {
         // 1. Получаем данные
-        double entryPrice = deal.getEntryPrice();
         double positionSize = deal.getPositionSize();
-        Direction direction = deal.getDirection();
-        double balance = accountService.getUsdtBalance();
 
         // 2. Валидация
         if (positionSize <= 0) {
             throw new IllegalArgumentException("Размер позиции должен быть > 0");
         }
+        double entryPrice = deal.getEntryPrice();
         if (entryPrice <= 0) {
             throw new IllegalArgumentException("Цена входа некорректна: " + entryPrice);
         }
+        double slPercent = strategyConfig.getDefaultSlPercent();
+        if (slPercent <= 0) {
+            throw new IllegalArgumentException("Процент стоп-лосса должен быть > 0, получено: " + slPercent);
+        }
 
-        // 3. Рассчитываем допустимый убыток в USD
-        double maxLossPercent = strategyConfig.getMaxLossPrecen(); // например, 1.0 = 1%
-        double maxLossUSD = balance * (maxLossPercent / 100.0);
-
-        // 4. Рассчитываем максимально допустимое расстояние до стопа
-        double delta = maxLossUSD / positionSize;
-
-        // 5. Определяем стоп в зависимости от направления
+        // 4. Рассчитываем стоп-лосс как процент от цены входа
+        double delta = entryPrice * slPercent;
+        Direction direction = deal.getDirection();
         double stopLoss;
+
         if (direction == Direction.LONG) {
             stopLoss = entryPrice - delta;
         } else if (direction == Direction.SHORT) {
@@ -118,14 +116,22 @@ public class DealCalculator {
             throw new IllegalStateException("Неизвестное направление: " + direction);
         }
 
-        // 6. Округляем по шагу цены (если нужно)
+        // 5. Округляем по шагу цены
         stopLoss = MathUtils.formatPrice(deal.getEntryPrice(), stopLoss);
 
+        // 6. Рассчитываем фактический возможный убыток в USD при срабатывании стопа
+        double priceDifference = Math.abs(entryPrice - stopLoss);
+        double potentialLossUSD = priceDifference * positionSize;
+
+        // 7. Логирование
         LoggerUtils.debug(
-                "Рассчитан стоп-лосс для обновления: " +
-                        "entry=" + entryPrice + ", posSize=" + positionSize +
-                        ", maxLoss%=" + maxLossPercent + ", maxLossUSD=" + maxLossUSD +
-                        ", delta=" + delta + ", stopLoss=" + stopLoss
+                "Рассчитан стоп-лосс для обновления позиции: " +
+                        "direction=" + direction + ", " +
+                        "entry=" + entryPrice + ", " +
+                        "posSize=" + positionSize + ", " +
+                        "slPercent=" + slPercent + "%, " +
+                        "stopLoss=" + stopLoss + ", " +
+                        "potentialLossUSD=" + String.format("%.2f", potentialLossUSD) + " USDT, "
         );
 
         return stopLoss;

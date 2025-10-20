@@ -6,9 +6,7 @@ import org.example.util.ValuesUtil;
 import java.util.*;
 
 public class PartialExitPlanner {
-    public List<ExitPlan.ExitStep> planExit(List<Double> takeProfits) {
-        return planExit(takeProfits, ValuesUtil.getDefaultTpExitRules());
-    }
+
 
     public List<ExitPlan.ExitStep> planExit(List<Double> takeProfits, Map<Integer, int[]> customRules) {
         ValidationUtils.checkNotNull(takeProfits, "Take profits list cannot be null");

@@ -48,32 +48,54 @@ public class ExitPlanManager {
                         BybitOrderRequest.forTakeProfit(deal, tpPrice, qty)
                 );
 
+                if (!orderResponse.isSuccess()) {
+                    String retMsg = orderResponse.getRetMsg();
+                    if (retMsg == null) retMsg = "Неизвестная ошибка от Bybit";
+
+                    // Проверяем, не связана ли ошибка с тем, что триггер уже недействителен
+                    if (retMsg.contains("trigger price") ||
+                            retMsg.contains("expect Rising") ||
+                            retMsg.contains("expect Falling") ||
+                            retMsg.contains("should be higher") ||
+                            retMsg.contains("should be lower")) {
+
+                        sb.append("\n⚠️ TP ")
+                                .append(MathUtils.formatPrice(deal.getEntryPrice(), tpPrice))
+                                .append(": цена уже прошла уровень — ордер не установлен");
+                        continue;
+                    }
+
+                    // Любая другая ошибка — критическая
+                    sb.append("\n❌ TP ")
+                            .append(MathUtils.formatPrice(deal.getEntryPrice(), tpPrice))
+                            .append(": ").append(retMsg);
+                    continue;
+                }
+
+                // Успешный ордер
                 deal.addOrderId(new OrderManager(orderResponse.getOrderResult().getOrderId(), OrderManager.OrderType.TP, tpPrice));
-                deal.addTakeProfit(tpPrice);
 
                 double entryPrice = deal.getEntryPrice();
                 double leverage = deal.getLeverageUsed();
 
-                // Расчёт базового PnL в %
                 double basePnlPercent = (deal.getDirection() == Direction.LONG
                         ? (tpPrice - entryPrice)
                         : (entryPrice - tpPrice)) / entryPrice * 100;
 
-                // С учётом плеча
                 double leveragedPnl = basePnlPercent * leverage;
 
                 sb.append("\n✅ TP ")
                         .append(MathUtils.formatPrice(entryPrice, tpPrice))
                         .append(" (+")
-                        .append(String.format("%.1f", leveragedPnl)) // Один знак после запятой
+                        .append(String.format("%.1f", leveragedPnl))
                         .append("%)")
                         .append(" (").append(percentage).append("%, qty ")
                         .append(MathUtils.formatPrice(deal.getPositionSize(), qty)).append(") ");
 
             } catch (Exception e) {
-                sb.append("❌ Ошибка TP ")
+                sb.append("\n❌ Ошибка TP ")
                         .append(MathUtils.formatPrice(deal.getEntryPrice(), tpPrice))
-                        .append(": ").append(e.getMessage()).append(" ");
+                        .append(": ").append(e.getMessage());
             }
         }
         return sb.toString();

@@ -8,7 +8,7 @@ import org.example.model.EntryType;
 import org.example.deal.dto.DealRequest;
 import org.example.monitor.dto.PositionInfo;
 import org.example.strategy.params.ExitPlan;
-import org.example.strategy.strategies.strategies.AbstractStrategy;
+import org.example.strategy.strategies.strategies.superStrategy.AbstractStrategy;
 import org.example.strategy.strategies.strategies.StrategyFactory;
 import org.example.util.EmojiUtils;
 import org.example.util.LoggerUtils;
@@ -44,7 +44,7 @@ public class Deal {
     private String strategyName = "ai";
     private AbstractStrategy strategy;
 
-    private boolean active = true;
+    private boolean active = false;
     private boolean positivePnL = false;
     private List<ExitStep> executedExits = new ArrayList<>();
     private Map<Double, Integer> tpToPercentage = new HashMap<>();
@@ -117,14 +117,6 @@ public class Deal {
         return Collections.unmodifiableList(takeProfits);
     }
 
-    public void addTakeProfit(double tp) {
-        if (takeProfits == null) {
-            takeProfits = new ArrayList<>();
-        }
-        takeProfits.add(tp);
-        takeProfits.sort(Double::compareTo); // сортируем по возрастанию
-    }
-
 
     public void updateDealFromBybitPosition(PositionInfo positionInfo) {
         if (positionInfo == null) {
@@ -142,9 +134,12 @@ public class Deal {
         this.positionInfo = positionInfo;
         this.leverageUsed = positionInfo.getLeverage();
         this.positionSize = positionInfo.getSize();
-        this.potentialLoss = positionInfo.getPotentialLoss();
         this.entryPrice = positionInfo.getAvgPrice();
-        this.stopLoss = positionInfo.getStopLoss();
+        this.potentialLoss = Math.round(positionSize * Math.abs(entryPrice - stopLoss) * 1000.0) / 1000.0;
+        double roi = getRoi();
+
+
+
 
         LoggerUtils.info(
                 "Deal updated from Bybit position:\n" +
@@ -152,7 +147,8 @@ public class Deal {
                         "Position Size: " + oldPositionSize + " → " + this.positionSize + "\n" +
                         "Potential Loss: " + oldPotentialLoss + " → " + this.potentialLoss + "\n" +
                         "Entry Price: " + oldEntryPrice + " → " + this.entryPrice + "\n" +
-                        "Stop Loss: " + oldStopLoss + " → " + this.stopLoss
+                        "Stop Loss: " + oldStopLoss + " → " + this.stopLoss + "\n" +
+                        "ROI: " + roi + "\n"
         );
     }
     // === Логика управления сделкой ===
@@ -190,6 +186,7 @@ public class Deal {
 
 
 
+
     /**
      * Возвращает количество оставшихся (еще не выполненных) TP.
      *
@@ -199,7 +196,7 @@ public class Deal {
         AtomicInteger count = new AtomicInteger(0); // Инициализируем счетчик
         takeProfits.forEach(tp -> {
             // Проверяем, был ли уже выход по этому TP
-            boolean executed = executedExits.stream().anyMatch(e -> Double.compare(e.getExitPrice(), tp) == 0);
+            boolean executed = executedExits.stream().anyMatch(e -> Double.compare(e.exitPrice(), tp) == 0);
             if (!executed) {
                 count.incrementAndGet();
             }
@@ -245,9 +242,28 @@ public class Deal {
     }
 
 
-    public void addOrderId(OrderManager order) {
-        this.ordersIdList.add(order);
+    public String addOrderId(OrderManager order) {
+        if (order == null) return "order == null";
+
+        String message = "";
+        if (order.getOrderType() == OrderManager.OrderType.SL) {
+            ordersIdList.removeIf(om -> om.getOrderType() == OrderManager.OrderType.SL);
+            ordersIdList.add(order);
+            setStopLoss(order.getOrderPrice());
+            message = "🔗SL заменен: " + order.getOrderId() + " -> " + order.getOrderPrice() + "\n";
+            return message; // ← ВЫХОД
+        }
+        if (order.getOrderType() == OrderManager.OrderType.TP) {
+            if (takeProfits == null) takeProfits = new ArrayList<>();
+            takeProfits.add(order.getOrderPrice());
+            takeProfits.sort(Double::compareTo);
+            message = "🔗 Привязан TP (лимит): " + order.getOrderId() + " -> " + order.getOrderPrice() + "\n";
+            ordersIdList.add(order); // ← только здесь
+            return message;
+        }
+        return "Неизвестный тип ордера";
     }
+
 
     public List<OrderManager> getOrdersIdList() {
         return Collections.unmodifiableList(ordersIdList);
@@ -258,35 +274,15 @@ public class Deal {
     }
     // === Вспомогательные классы ===
 
-    @Getter
-    public static class ExitStep {
-        private final double exitPrice;
-        private final double exitAmount;
 
-        public ExitStep(double exitPrice, double exitAmount) {
-            this.exitPrice = exitPrice;
-            this.exitAmount = exitAmount;
-        }
-    }
-    /**
-     * Возвращает orderId ордера Take Profit (TP), если он привязан.
-     */
-    public List<String> getTpOrderId() {
-        return getOrderIdsByType(OrderManager.OrderType.TP);
+        public record ExitStep(double exitPrice, double exitAmount) {
     }
 
-    /**
-     * Возвращает orderId ордера Stop Loss (SL), если он привязан.
-     */
-    public String getSlOrderId() {
-        List<String> slIds = getOrderIdsByType(OrderManager.OrderType.SL);
-        return slIds.isEmpty() ? null : slIds.get(0);
-    }
 
     /**
      * Внутренний метод поиска orderId по типу.
      */
-    private List<String> getOrderIdsByType(OrderManager.OrderType type) {
+    public List<String> getOrderIdsByType(OrderManager.OrderType type) {
         if (ordersIdList == null || ordersIdList.isEmpty()) {
             return Collections.emptyList();
         }
@@ -297,4 +293,15 @@ public class Deal {
                 .collect(Collectors.toList());
     }
     // equals и hashCode можно добавить при необходимости, например, для хранения в Set
+
+    public double getRoi() {
+        if (leverageUsed == 0 || positionInfo.getPositionValue() == 0) {
+            return 0.0;
+        }
+        double initialMargin = positionInfo.getPositionValue() / leverageUsed;
+        if (initialMargin == 0) {
+            return  0.0;
+        }
+        return (positionInfo.getUnrealisedPnl() / initialMargin) * 100.0;
+    }
 }
