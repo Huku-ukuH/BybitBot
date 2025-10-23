@@ -14,7 +14,6 @@ import java.io.IOException;
 public interface TradingStrategy {
 
     StrategyConfig getConfig();
-    Deal createDealBySignal(AiService aiService, String messageText, long chatId, String strategyName);
     void onPriceUpdate(Deal deal, PriceUpdate priceUpdate, UpdateManager updateManager, StopLossManager stopLossManager, BybitManager bybitManager) throws IOException;
     void onTakeProfitHit(Deal deal, double executedPrice);
     void onStopLossHit(Deal deal);

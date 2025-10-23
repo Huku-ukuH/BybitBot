@@ -1,4 +1,4 @@
-package org.example.deal;
+package org.example.deal.utils;
 
 import lombok.*;
 

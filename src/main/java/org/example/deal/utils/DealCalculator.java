@@ -1,7 +1,8 @@
 
-package org.example.deal;
+package org.example.deal.utils;
 import org.example.bybit.service.BybitAccountService;
 import org.example.bybit.service.BybitMarketService;
+import org.example.deal.Deal;
 import org.example.model.Direction;
 import org.example.util.LoggerUtils;
 import org.example.util.MathUtils;

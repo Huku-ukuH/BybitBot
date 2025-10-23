@@ -1,6 +1,7 @@
-package org.example.deal;
+package org.example.deal.utils;
 
 import org.example.bybit.service.BybitMarketService;
+import org.example.deal.Deal;
 import org.example.deal.dto.DealValidationResult;
 import org.example.model.Direction;
 import org.example.util.EmojiUtils;

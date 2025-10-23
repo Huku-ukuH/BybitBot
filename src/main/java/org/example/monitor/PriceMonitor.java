@@ -6,7 +6,7 @@ import lombok.Data;
 import org.example.bybit.BybitManager;
 import org.example.bybit.client.BybitWebSocketClient;
 import org.example.bot.MessageSender;
-import org.example.deal.ActiveDealStore;
+import org.example.deal.utils.ActiveDealStore;
 import org.example.deal.Deal;
 import org.example.update.UpdateManager;
 import org.example.monitor.dto.PriceUpdate;

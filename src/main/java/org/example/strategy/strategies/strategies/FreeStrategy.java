@@ -1,11 +1,10 @@
 package org.example.strategy.strategies.strategies;
 
-import org.example.ai.AiService;
 import org.example.bybit.BybitManager;
 import org.example.bybit.service.BybitAccountService;
 import org.example.bybit.service.BybitMarketService;
 import org.example.deal.Deal;
-import org.example.deal.DealCalculator;
+import org.example.deal.utils.DealCalculator;
 import org.example.strategy.strategies.strategies.superStrategy.AbstractStrategy;
 import org.example.update.UpdateManager;
 import org.example.deal.dto.DealValidationResult;
@@ -50,12 +49,6 @@ public class FreeStrategy extends AbstractStrategy {
 
     @Override
     public StrategyConfig getConfig() {
-        // TODO: своя логика, если требуется
-        return null;
-    }
-
-    @Override
-    public Deal createDealBySignal(AiService aiService, String messageText, long chatId, String strategyName) {
         // TODO: своя логика, если требуется
         return null;
     }

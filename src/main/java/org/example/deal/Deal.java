@@ -2,6 +2,7 @@ package org.example.deal;
 
 import lombok.Getter;
 import lombok.Setter;
+import org.example.deal.utils.OrderManager;
 import org.example.model.Symbol;
 import org.example.model.Direction;
 import org.example.model.EntryType;

@@ -2,9 +2,9 @@ package org.example.update;
 
 import org.example.bybit.BybitManager;
 import org.example.bybit.service.BybitPositionTrackerService;
-import org.example.deal.ActiveDealStore;
+import org.example.deal.utils.ActiveDealStore;
 import org.example.deal.Deal;
-import org.example.deal.DealCalculator;
+import org.example.deal.utils.DealCalculator;
 import org.example.model.Symbol;
 import org.example.monitor.dto.PositionInfo;
 import org.example.strategy.strategies.strategies.superStrategy.AbstractStrategy;
@@ -13,16 +13,16 @@ import org.example.util.LoggerUtils;
 
 import java.util.List;
 
-public class DealCreator {
+public class UpdateDealCreator {
 
     private final DealCalculator dealCalculator;
-    public DealCreator(DealCalculator dealCalculator) {
+    public UpdateDealCreator(DealCalculator dealCalculator) {
         this.dealCalculator = dealCalculator;
     }
 
     public CreationResult dealCreationTypeSorter (
             String strategyName,
-            ActiveDealStore store,
+            ActiveDealStore activeDealStore,
             long chatId,
             BybitManager bybitManager,
             List<PositionInfo> pendingPositions,
@@ -30,14 +30,14 @@ public class DealCreator {
             int currentIndex, OrderRestorer orderRestorer) {
 
         if (pendingOrdersForDealCreation.isEmpty()) {
-            return createNextDeal(strategyName, store, chatId, bybitManager, pendingPositions, currentIndex, orderRestorer);
+            return createNextDealByOpenPosition(strategyName, activeDealStore, chatId, bybitManager, pendingPositions, currentIndex, orderRestorer);
         }
-        return createNextDealByLimitOrder(strategyName, store, chatId, pendingOrdersForDealCreation, currentIndex);
+        return createNextDealByLimitOrder(strategyName, activeDealStore, chatId, pendingOrdersForDealCreation, currentIndex);
     }
 
-    public CreationResult createNextDeal(
+    public CreationResult createNextDealByOpenPosition(
             String strategyName,
-            ActiveDealStore store,
+            ActiveDealStore activeDealStore,
             long chatId,
             BybitManager bybitManager,
             List<PositionInfo> pendingPositions,
@@ -57,7 +57,7 @@ public class DealCreator {
 
         try {
             AbstractStrategy strategy = StrategyFactory.getStrategy(strategyName);
-            Deal deal = strategy.createDealByUpdate(pos, chatId, strategyName);
+            Deal deal = strategy.getStrategyDealCreator().createDealByOpenPosition(pos, chatId, strategyName, activeDealStore);
             deal.setId(pos.getSymbol() + "_" + strategyName + "_" + System.currentTimeMillis());
 
             StringBuilder msg = new StringBuilder(orderRestorer.restoreOrders(deal, bybitManager));
@@ -81,7 +81,7 @@ public class DealCreator {
                 }
             }
 
-            store.addDeal(deal);
+            activeDealStore.addDeal(deal);
             msg.append("✅ Deal для ").append(pos.getSymbol()).append(" восстановлена со стратегией '").append(strategyName).append("'.\n");
 
             if (currentIndex < pendingPositions.size()) {
@@ -101,7 +101,7 @@ public class DealCreator {
 
     public CreationResult createNextDealByLimitOrder(
             String strategyName,
-            ActiveDealStore store,
+            ActiveDealStore activeDealStore,
             long chatId,
             List<BybitPositionTrackerService.OrderInfo> pendingOrdersForDealCreation,
             int currentIndex) {
@@ -115,7 +115,7 @@ public class DealCreator {
         Symbol symbol = orderInfo.getSymbol();
 
         // 🔍 Проверяем, существует ли уже сделка по этому символу
-        if (!store.getDealsBySymbol(symbol).isEmpty()) {
+        if (!activeDealStore.getDealsBySymbol(symbol).isEmpty()) {
             StringBuilder msg = new StringBuilder();
             msg.append("⚠️ Сделка для ").append(symbol).append(" уже существует. Пропускаем.\n");
 
@@ -137,10 +137,8 @@ public class DealCreator {
 
         try {
             AbstractStrategy strategy = StrategyFactory.getStrategy(strategyName);
-            Deal deal = strategy.createDealByUpdate(orderInfo, chatId, strategyName);
+            Deal deal = strategy.getStrategyDealCreator().createDealByLimitOrder(orderInfo, chatId, strategyName, activeDealStore);
             deal.setId(symbol + "_" + strategyName + "_" + System.currentTimeMillis());
-
-            store.addDeal(deal);
 
             StringBuilder msg = new StringBuilder();
             msg.append("✅ Deal для ордера ").append(symbol).append(" создана со стратегией '").append(strategyName).append("'.\n");

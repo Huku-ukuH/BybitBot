@@ -3,7 +3,7 @@ package org.example.update;
 import org.example.bybit.BybitManager;
 import org.example.bybit.service.BybitPositionTrackerService;
 import org.example.deal.Deal;
-import org.example.deal.OrderManager;
+import org.example.deal.utils.OrderManager;
 import org.example.model.Direction;
 import org.example.util.JsonUtils;
 import org.example.util.LoggerUtils;

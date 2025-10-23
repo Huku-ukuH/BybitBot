@@ -4,9 +4,9 @@ import lombok.Getter;
 import lombok.Setter;
 import org.example.ai.AiService;
 import org.example.bybit.BybitManager;
-import org.example.deal.ActiveDealStore;
+import org.example.deal.utils.ActiveDealStore;
 import org.example.deal.Deal;
-import org.example.deal.DealCalculator;
+import org.example.deal.utils.DealCalculator;
 import org.example.update.UpdateManager;
 import org.example.deal.dto.DealRequest;
 import org.example.deal.dto.DealValidationResult;
@@ -115,14 +115,14 @@ public class BotCommandHandler {
 
         // Попытка 1
         try {
-            createdDeal = StrategyFactory.getStrategy(strategyName).createDealBySignal(aiService, messageText, chatId, strategyName);
+            createdDeal = StrategyFactory.getStrategy(strategyName).getStrategyDealCreator().createDealBySignal(aiService, messageText, chatId, strategyName, activeDealStore);
         } catch (Exception firstAttemptEx) {
             LoggerUtils.warn("Первая попытка createDeal провалилась. Повтор...");
 
             // Попытка 2 — только если причина в ИИ/парсинге, а не в фатальных ошибках
             try {
-                createdDeal = StrategyFactory.getStrategy(strategyName)
-                        .createDealBySignal(aiService, messageText, chatId, strategyName);
+                createdDeal = StrategyFactory.getStrategy(strategyName).getStrategyDealCreator()
+                        .createDealBySignal(aiService, messageText, chatId, strategyName, activeDealStore);
             } catch (Exception secondAttemptEx) {
                 // Обе попытки провалились
                 String errorMsg = "Не удалось обработать сигнал после двух попыток";
@@ -189,13 +189,12 @@ public class BotCommandHandler {
         }
 
         try {
-            if (deal.getStrategy().openDeal(bybitManager.getBybitOrderService(), deal)) {
-                activeDealStore.addDeal(deal);
+            if (deal.getStrategy().openPosition(bybitManager.getBybitOrderService(), deal)) {
 
                 if (deal.getEntryType() == EntryType.MARKET) {
                     String result;
                     try {
-                        result = deal.getStrategy().goIfDealOpen(deal, bybitManager);
+                        result = deal.getStrategy().positionHasBeenOpened(deal, bybitManager);
                     } catch (Exception e) {
                         messageSender.sendError(chatId, "Ошибка при активации сделки", e, "handleGo()");
                         cycleBreak(chatId);

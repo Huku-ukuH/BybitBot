@@ -1,13 +1,11 @@
 package org.example.strategy.params;
 
-import org.example.bot.MessageSender;
-import org.example.bybit.dto.BalanceResponse;
 import org.example.bybit.dto.BybitOrderRequest;
 import org.example.bybit.dto.BybitOrderResponse;
 import org.example.bybit.service.BybitOrderService;
 import org.example.deal.Deal;
-import org.example.deal.DealCalculator;
-import org.example.deal.OrderManager;
+import org.example.deal.utils.DealCalculator;
+import org.example.deal.utils.OrderManager;
 import org.example.model.Direction;
 import org.example.util.MathUtils;
 

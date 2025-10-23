@@ -3,8 +3,8 @@ package org.example.update;
 import lombok.Getter;
 import org.example.bybit.BybitManager;
 import org.example.bybit.service.BybitPositionTrackerService;
-import org.example.deal.ActiveDealStore;
-import org.example.deal.DealCalculator;
+import org.example.deal.utils.ActiveDealStore;
+import org.example.deal.utils.DealCalculator;
 import org.example.monitor.dto.PositionInfo;
 
 import java.io.IOException;
@@ -14,7 +14,7 @@ import java.util.List;
 public class UpdateManager {
 
     private final DealUpdater dealUpdater;
-    private final DealCreator dealCreator;
+    private final UpdateDealCreator updateDealCreator;
     private final BybitManager bybitManager;
     private final OrderRestorer orderRestorer;
 
@@ -25,7 +25,7 @@ public class UpdateManager {
     private int currentRestoreIndex = 0;
 
     public UpdateManager(BybitManager bybitManager, DealCalculator dealCalculator) {
-        this.dealCreator = new DealCreator(dealCalculator);
+        this.updateDealCreator = new UpdateDealCreator(dealCalculator);
         this.orderRestorer = new OrderRestorer();
         this.dealUpdater = new DealUpdater(orderRestorer);
         this.bybitManager = bybitManager;
@@ -77,9 +77,9 @@ public class UpdateManager {
     public PositionInfo updateOneDeal(String symbol) {
         return bybitManager.getBybitPositionTrackerService().getPositionBySymbol(symbol);
     }
-    private String handleDealCreation(String strategyName, ActiveDealStore store, long chatId) {
-        CreationResult result = dealCreator.dealCreationTypeSorter(
-                strategyName, store, chatId, bybitManager, pendingNewPositions, pendingOrdersForDealCreation, currentRestoreIndex, orderRestorer);
+    private String handleDealCreation(String strategyName, ActiveDealStore activeDealStore, long chatId) {
+        CreationResult result = updateDealCreator.dealCreationTypeSorter(
+                strategyName, activeDealStore, chatId, bybitManager, pendingNewPositions, pendingOrdersForDealCreation, currentRestoreIndex, orderRestorer);
         currentRestoreIndex = result.nextIndex();
         createDealsProcess = result.stillCreating();
         return result.message();

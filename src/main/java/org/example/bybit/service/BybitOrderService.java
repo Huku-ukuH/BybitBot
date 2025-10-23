@@ -5,7 +5,7 @@ import org.example.bybit.dto.BybitOrderResponse;
 import org.example.bybit.dto.SetLeverageResponse;
 import org.example.bybit.client.BybitHttpClient;
 import org.example.deal.Deal;
-import org.example.deal.OrderManager;
+import org.example.deal.utils.OrderManager;
 import org.example.model.Direction;
 import org.example.util.JsonUtils;
 import org.example.util.LoggerUtils;

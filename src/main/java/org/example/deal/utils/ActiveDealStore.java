@@ -1,5 +1,6 @@
-package org.example.deal;
+package org.example.deal.utils;
 
+import org.example.deal.Deal;
 import org.example.model.Symbol;
 import org.example.util.ValidationUtils;
 
@@ -29,20 +30,34 @@ public class ActiveDealStore {
      * Добавляет новую сделку.
      * Уведомляет всех подписчиков.
      */
-    public void addDeal(Deal deal) {
+    public boolean addDeal(Deal deal) {
         ValidationUtils.checkNotNull(deal, "Deal cannot be null");
         ValidationUtils.checkNotNull(deal.getId(), "Deal ID cannot be null");
         ValidationUtils.checkNotNull(deal.getSymbol(), "Deal symbol cannot be null");
 
-        dealsById.put(deal.getId(), deal);
+        // 1. Если уже есть по ID — не добавляем
+        if (dealsById.containsKey(deal.getId())) {
+            return false;
+        }
 
-        // Обновляем индекс по символу
+        // 2. Если уже есть активная сделка по символу — не добавляем
+        Set<Deal> existingDeals = dealsBySymbol.get(deal.getSymbol());
+        if (existingDeals != null && !existingDeals.isEmpty()) {
+            // Можно дополнительно проверить, что хотя бы одна активна
+            boolean hasActive = existingDeals.stream().anyMatch(Deal::isActive);
+            if (hasActive) {
+                return false;
+            }
+        }
+
+        // 3. Добавляем
+        dealsById.put(deal.getId(), deal);
         dealsBySymbol
                 .computeIfAbsent(deal.getSymbol(), k -> ConcurrentHashMap.newKeySet())
                 .add(deal);
 
-        // Уведомляем слушателей
         onDealAddedListeners.forEach(listener -> listener.accept(deal));
+        return true; // успешно добавлено
     }
 
     /**

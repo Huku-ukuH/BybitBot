@@ -1,7 +1,7 @@
 package org.example.update;
 
 import org.example.bybit.BybitManager;
-import org.example.deal.ActiveDealStore;
+import org.example.deal.utils.ActiveDealStore;
 import org.example.deal.Deal;
 import org.example.monitor.dto.PositionInfo;
 
