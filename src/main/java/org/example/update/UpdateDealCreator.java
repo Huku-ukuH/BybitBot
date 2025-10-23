@@ -111,8 +111,8 @@ public class UpdateDealCreator {
         }
 
         BybitPositionTrackerService.OrderInfo orderInfo = pendingOrdersForDealCreation.get(currentIndex);
-
         Symbol symbol = orderInfo.getSymbol();
+
 
         // 🔍 Проверяем, существует ли уже сделка по этому символу
         if (!activeDealStore.getDealsBySymbol(symbol).isEmpty()) {

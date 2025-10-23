@@ -10,6 +10,8 @@ import org.example.bybit.service.BybitOrderService;
 import org.example.deal.Deal;
 import org.example.deal.utils.DealCalculator;
 import org.example.deal.utils.DealValidator;
+import org.example.result.OperationResult;
+import org.example.strategy.strategies.strategies.StrategyException;
 import org.example.strategy.strategies.strategies.TradingStrategy;
 import org.example.update.UpdateManager;
 import org.example.deal.dto.DealValidationResult;
@@ -84,53 +86,55 @@ public abstract class AbstractStrategy implements TradingStrategy {
         }
     }
 
-    public String positionHasBeenOpened(Deal deal, BybitManager bybitManager) {
+    public OperationResult positionHasBeenOpened(Deal deal, BybitManager bybitManager) {
         deal.setActive(true);
-        return setSL(deal, bybitManager) + "\n" + setTP(deal, bybitManager);
+
+        OperationResult slResult = setSL(deal, bybitManager);
+        OperationResult tpResult = setTP(deal, bybitManager);
+
+        StringBuilder msg = new StringBuilder();
+        msg.append(slResult.getMessage()).append("\n").append(tpResult.getMessage());
+
+        boolean success = slResult.isSuccess() && tpResult.isSuccess();
+        slResult.logErrorIfFailed();
+        tpResult.logErrorIfFailed();
+
+        return success ? OperationResult.success(msg.toString()) : OperationResult.failure(msg.toString());
     }
 
-    public String setSL(Deal deal, BybitManager bybitManager){
-        // Устанавливаем стоп-лосс
-        String result = "";
-        try {
+        public OperationResult setSL(Deal deal, BybitManager bybitManager) {
+            try {
+                double currentPrice = bybitManager.getBybitMarketService().getLastPrice(deal.getSymbol().toString());
+                Direction dir = deal.getDirection();
 
-            double currentPrice = bybitManager.getBybitMarketService().getLastPrice(deal.getSymbol().toString());
-            Direction dir = deal.getDirection();
+                LoggerUtils.info("SetSL method. Deal SL = " + deal.getStopLoss() + ", CMP = " + currentPrice);
 
+                boolean isInvalidSL = (dir == Direction.SHORT && currentPrice >= deal.getStopLoss()) ||
+                        (dir == Direction.LONG  && currentPrice <= deal.getStopLoss());
+                if (isInvalidSL) {
+                    return OperationResult.failure("⚠️ Уровень SL (" + deal.getStopLoss() + ") уже пройден текущей ценой (" + currentPrice + ").");
+                }
 
-            LoggerUtils.info("!!!!!!!!!!!!!!!!SetSL mrthod. Dral SL = " + deal.getStopLoss() + "CMP = " + currentPrice);
+                BybitOrderResponse slResponse = bybitManager.getBybitOrderService().setStopLoss(deal);
+                if (!slResponse.isSuccess()) {
+                    String retMsg = slResponse.getRetMsg() != null ? slResponse.getRetMsg() : "Bybit не отправил сообщение об ошибке";
+                    return OperationResult.failure("❌ Не удалось установить SL: " + retMsg);
+                }
 
+                return OperationResult.success("✅ Стоп-лосс установлен для " + deal.getSymbol() + ": " + deal.getStopLoss());
 
-            boolean isInvalidSL = (dir == Direction.SHORT && currentPrice >= deal.getStopLoss()) ||
-                    (dir == Direction.LONG  && currentPrice <= deal.getStopLoss());
-            if (isInvalidSL) {
-                return "⚠️ Уровень SL (" + deal.getStopLoss() + ") уже пройден текущей ценой (" + currentPrice + ").";
+            } catch (Exception e) {
+                // Сохраняем исключение целиком — со стеком!
+                return OperationResult.failure("❌ Техническая ошибка при установке SL", e);
             }
-
-            BybitOrderResponse slResponse = bybitManager.getBybitOrderService().setStopLoss(deal);
-            String retMsg = slResponse.getRetMsg();
-
-            if (!slResponse.isSuccess()) {
-                result = retMsg != null ? retMsg : "No error message from Bybit";
-                throw new IllegalStateException("❌ Не удалось установить SL: " + result);
-            }
-
-            result = "✅ Стоп-лосс установлен для " + deal.getSymbol() + ": " + deal.getStopLoss();
-            LoggerUtils.info(result);
-        } catch (Exception e) {
-            throw new RuntimeException("❌ Ошибка при установке SL для символа " + deal.getSymbol() + "результат :" + result, e);
         }
-        return result;
-    }
 
 
-    public String setTP(Deal deal, BybitManager bybitManager) {
-        // Устанавливаем TP через ExitPlan
+    public OperationResult setTP(Deal deal, BybitManager bybitManager) {
         try {
             ExitPlan plan = deal.getStrategy().planExit(deal);
-
             if (plan == null || plan.getSteps().isEmpty()) {
-                return "⚠️ План выхода не сформирован.";
+                return OperationResult.failure("⚠️ План выхода не сформирован.");
             }
 
             ExitPlanManager exitPlanManager = new ExitPlanManager(
@@ -138,10 +142,10 @@ public abstract class AbstractStrategy implements TradingStrategy {
                     bybitManager.getBybitOrderService()
             );
 
-            return exitPlanManager.executeExitPlan(deal, plan);
+            return exitPlanManager.executeExitPlan(deal, plan); // ← этот метод тоже должен возвращать OperationResult, без исключений
+
         } catch (Exception e) {
-            LoggerUtils.error("❌ Ошибка при установке TP для символа " + deal.getSymbol(), e);
-            throw new RuntimeException("❌ Ошибка при установке TP для символа " + deal.getSymbol(), e);
+            return OperationResult.failure("❌ Ошибка при установке TP: ", e);
         }
     }
 

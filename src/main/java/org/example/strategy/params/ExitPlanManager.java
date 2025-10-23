@@ -7,6 +7,8 @@ import org.example.deal.Deal;
 import org.example.deal.utils.DealCalculator;
 import org.example.deal.utils.OrderManager;
 import org.example.model.Direction;
+import org.example.result.OperationResult;
+import org.example.strategy.strategies.strategies.StrategyException;
 import org.example.util.MathUtils;
 
 public class ExitPlanManager {
@@ -24,9 +26,9 @@ public class ExitPlanManager {
     /**
      * исполняет план
      */
-    public String executeExitPlan(Deal deal, ExitPlan plan) {
+    public OperationResult executeExitPlan(Deal deal, ExitPlan plan) throws StrategyException {
         if (plan == null || plan.getSteps().isEmpty()) {
-            return "Нет плана выхода для выполнения.";
+            return OperationResult.failure("Нет плана выхода для выполнения.");
         }
 
         StringBuilder sb = new StringBuilder("Результат установки TP: ");
@@ -59,7 +61,7 @@ public class ExitPlanManager {
 
                         sb.append("\n⚠️ TP ")
                                 .append(MathUtils.formatPrice(deal.getEntryPrice(), tpPrice))
-                                .append(": цена уже прошла уровень — ордер не установлен");
+                                .append(": цена прошла уровень — ордер не установлен");
                         continue;
                     }
 
@@ -94,8 +96,9 @@ public class ExitPlanManager {
                 sb.append("\n❌ Ошибка TP ")
                         .append(MathUtils.formatPrice(deal.getEntryPrice(), tpPrice))
                         .append(": ").append(e.getMessage());
+                throw new StrategyException(sb.toString());
             }
         }
-        return sb.toString();
+        return OperationResult.success(sb.toString());
     }
 }

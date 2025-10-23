@@ -2,6 +2,7 @@ package org.example.deal.utils;
 
 import org.example.deal.Deal;
 import org.example.model.Symbol;
+import org.example.result.OperationResult;
 import org.example.util.ValidationUtils;
 
 import java.util.*;
@@ -30,14 +31,14 @@ public class ActiveDealStore {
      * Добавляет новую сделку.
      * Уведомляет всех подписчиков.
      */
-    public boolean addDeal(Deal deal) {
+    public OperationResult addDeal(Deal deal) {
         ValidationUtils.checkNotNull(deal, "Deal cannot be null");
         ValidationUtils.checkNotNull(deal.getId(), "Deal ID cannot be null");
         ValidationUtils.checkNotNull(deal.getSymbol(), "Deal symbol cannot be null");
 
         // 1. Если уже есть по ID — не добавляем
         if (dealsById.containsKey(deal.getId())) {
-            return false;
+            return OperationResult.failure("Айди Deal " + deal.getSymbol() + "   уже есть в ActiveDealStore, операция добавления отклонена");
         }
 
         // 2. Если уже есть активная сделка по символу — не добавляем
@@ -46,7 +47,7 @@ public class ActiveDealStore {
             // Можно дополнительно проверить, что хотя бы одна активна
             boolean hasActive = existingDeals.stream().anyMatch(Deal::isActive);
             if (hasActive) {
-                return false;
+                return OperationResult.failure("Активная Deal " + deal.getSymbol() + "  уже есть в ActiveDealStore, операция добавления отклонена");
             }
         }
 
@@ -57,16 +58,18 @@ public class ActiveDealStore {
                 .add(deal);
 
         onDealAddedListeners.forEach(listener -> listener.accept(deal));
-        return true; // успешно добавлено
+        return OperationResult.success(); // успешно добавлено
     }
 
     /**
      * Удаляет сделку по ID.
      * @return true, если сделка была удалена
      */
-    public boolean removeDeal(String id) {
+    public OperationResult removeDeal(String id) {
         Deal deal = dealsById.remove(id);
-        if (deal == null) return false;
+        if (deal == null) {
+            return OperationResult.failure("Невозможно удалить Deal из ActiveDealStore, Deal == null");
+        }
 
         // Удаляем из индекса по символу
         Set<Deal> deals = dealsBySymbol.get(deal.getSymbol());
@@ -76,10 +79,9 @@ public class ActiveDealStore {
                 dealsBySymbol.remove(deal.getSymbol());
             }
         }
-
         // Уведомляем об удалении
         onDealRemovedListeners.forEach(listener -> listener.accept(deal));
-        return true;
+        return OperationResult.success();
     }
 
 

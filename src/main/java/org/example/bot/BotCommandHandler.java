@@ -7,6 +7,7 @@ import org.example.bybit.BybitManager;
 import org.example.deal.utils.ActiveDealStore;
 import org.example.deal.Deal;
 import org.example.deal.utils.DealCalculator;
+import org.example.result.OperationResult;
 import org.example.update.UpdateManager;
 import org.example.deal.dto.DealRequest;
 import org.example.deal.dto.DealValidationResult;
@@ -190,17 +191,16 @@ public class BotCommandHandler {
 
         try {
             if (deal.getStrategy().openPosition(bybitManager.getBybitOrderService(), deal)) {
-
                 if (deal.getEntryType() == EntryType.MARKET) {
-                    String result;
-                    try {
-                        result = deal.getStrategy().positionHasBeenOpened(deal, bybitManager);
-                    } catch (Exception e) {
-                        messageSender.sendError(chatId, "Ошибка при активации сделки", e, "handleGo()");
+                    OperationResult result = deal.getStrategy().positionHasBeenOpened(deal, bybitManager);
+                    result.logErrorIfFailed();
+
+                    if (result.isSuccess()) {
+                        messageSender.send(chatId, EmojiUtils.OKAY + " Сделка открыта!\n" + deal.bigDealToString() + "\n" + result.getMessage());
+                    } else {
+                        messageSender.sendWarn(chatId, result.getMessage(), "handleGo()");
                         cycleBreak(chatId);
-                        return;
                     }
-                    messageSender.send(chatId, EmojiUtils.OKAY + " Сделка открыта!\n" + deal.bigDealToString() + "\n" + result);
                 } else {
                     messageSender.send(chatId, "🕒 Лимитный ордер выставлен. Ожидаем вход...");
                 }
@@ -209,7 +209,8 @@ public class BotCommandHandler {
                 cycleBreak(chatId);
             }
         } catch (Exception e) {
-            messageSender.sendError(chatId, "❌ Ошибка при открытии сделки", e, "handleGo()");
+            // Только для truly неожиданных ошибок (NPE, DI-сбой и т.п.)
+            messageSender.sendError(chatId, "❌ Критическая ошибка", e, "handleGo()");
             cycleBreak(chatId);
         }
     }
