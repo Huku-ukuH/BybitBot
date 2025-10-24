@@ -83,8 +83,7 @@ public class BotCommandHandler {
     }
     private void cycleBreak(long chatId) {
         if (activeDealStore.containsDeal(deal.getId())) {
-           messageSender.send(chatId, bybitManager.getBybitOrderService().closeDeal(deal));
-
+           messageSender.send(chatId, bybitManager.getBybitOrderService().closeDeal(deal).getMessage());
         }
 
         activeDealStore.removeDeal(deal.getId());

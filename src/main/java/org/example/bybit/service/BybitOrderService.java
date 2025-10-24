@@ -7,9 +7,11 @@ import org.example.bybit.client.BybitHttpClient;
 import org.example.deal.Deal;
 import org.example.deal.utils.OrderManager;
 import org.example.model.Direction;
+import org.example.result.OperationResult;
 import org.example.util.JsonUtils;
 import org.example.util.LoggerUtils;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 public class BybitOrderService {
@@ -80,12 +82,12 @@ public class BybitOrderService {
             return bybitHttpClient.signedPost("/v5/order/create", JsonUtils.toJson(params), BybitOrderResponse.class);
 
         } catch (Exception e) {
-            LoggerUtils.error("setStopLoss() Ошибка установки стоп-лосса: ", e);
+            LoggerUtils.error("❌setStopLoss() Ошибка установки стоп-лосса: ", e);
             throw new RuntimeException(e);
         }
     }
 
-    public void cancelOrder(Deal deal, String orderId) {
+    public OperationResult cancelOrder(Deal deal, String orderId) {
         try {
             Map<String, String> body = new HashMap<>();
             body.put("orderId", orderId);
@@ -96,28 +98,63 @@ public class BybitOrderService {
             bybitHttpClient.signedPost("/v5/order/cancel", json, Void.class);
 
         } catch (Exception e) {
-            LoggerUtils.error("Ошибка отмены ордера: ", e);
+            return OperationResult.failure("❌Ошибка отмены ордера " + deal.getSymbol() + " по цене " + findOrderPriceByOrderId(deal, orderId), e);
         }
+        return OperationResult.success("Ордер " + deal.getSymbol() + " по цене " + findOrderPriceByOrderId(deal, orderId) + " - отменен");
     }
-    public String closeDeal(Deal deal) {
+
+    public OperationResult cancelOrders(Deal deal) {
+        StringBuilder cancelOrdersStringResult = new StringBuilder("Результат отмены TP SL для " + deal.getSymbol() + "\n");
+        boolean hasErrors = false;
+
+        for (OrderManager order : deal.getOrdersIdList()) {
+            if (order.getOrderType() == OrderManager.OrderType.TP ||
+                    order.getOrderType() == OrderManager.OrderType.SL) {
+
+                OperationResult res = cancelOrder(deal, order.getOrderId());
+
+                if (res.isSuccess()) {
+                    cancelOrdersStringResult.append(res.getMessage()).append("\n");
+                    continue;
+                }
+
+                res.logErrorIfFailed();
+                cancelOrdersStringResult.append(res.getMessage()).append("\n");
+                hasErrors = true;
+
+            }
+        }
+
+        if (hasErrors) {
+            return OperationResult.success("❌ЧАСТИЧНЫЙ УСПЕХ " + "\n" + cancelOrdersStringResult);
+        }
+        return OperationResult.success("Все TP и SL отменены или их не было");
+    }
+
+    public double findOrderPriceByOrderId(Deal deal, String orderId) {
+        return deal.getOrdersIdList().stream()
+                .filter(o -> orderId.equals(o.getOrderId()))
+                .findFirst()
+                .map(OrderManager::getOrderPrice)
+                .orElse(Double.NaN);
+    }
+
+
+    public OperationResult closeDeal(Deal deal) {
         if (deal == null) {
-            return "❌ Deal is null";
+            return OperationResult.failure("❌ Deal is null");
+        }
+        List<OrderManager> orders = deal.getOrdersIdList();
+        if (orders == null || orders.isEmpty()) {
+            return OperationResult.success("Нет ордеров для отмены (или ordersIdList = null)");
         }
 
         String symbol = deal.getSymbol().getSymbol();
         String side = deal.getDirection() == Direction.LONG ? "Sell" : "Buy";
 
         // --- Шаг 1: Отменяем TP и SL ---
-        for (OrderManager order : deal.getOrdersIdList()) {
-            if (order.getOrderType() == OrderManager.OrderType.TP ||
-                    order.getOrderType() == OrderManager.OrderType.SL) {
-                try {
-                    cancelOrder(deal, order.getOrderId());
-                } catch (Exception e) {
-                    LoggerUtils.error("⚠️ Не удалось отменить ордер " + order.getOrderId(), e);
-                }
-            }
-        }
+        OperationResult cancelResult = cancelOrders(deal);
+        String cancelReport = cancelResult.getMessage();
 
         // --- Шаг 2: Закрываем позицию ---
         try {
@@ -129,22 +166,35 @@ public class BybitOrderService {
 
             Object response = bybitHttpClient.signedPost("/v5/position/close-position", JsonUtils.toJson(params), Object.class);
 
-            // Предполагаем, что ответ — это Map
             @SuppressWarnings("unchecked")
             Map<String, Object> result = (Map<String, Object>) response;
-            int retCode = (Integer) result.get("retCode");
+            Integer retCode = (Integer) result.get("retCode");
 
-            if (retCode == 0) {
-                return "✅ Сделка `" + symbol + "` закрыта.";
+            StringBuilder closePositionResult = new StringBuilder();
+
+            if (retCode != null && retCode == 0) {
+                closePositionResult.append("✅ Сделка `").append(symbol).append("` успешно закрыта.\n\n");
+                closePositionResult.append(cancelReport);
+                return OperationResult.success(closePositionResult.toString());
+            } else {
+                String retMsg = (String) result.getOrDefault("retMsg", "неизвестная ошибка Bybit");
+                closePositionResult.append("❌ Не удалось закрыть сделку: ").append(retMsg).append("\n\n");
+                closePositionResult.append(cancelReport);
+                return OperationResult.failure(closePositionResult.toString());
             }
-            return "❌ Ошибка: " + result.get("retMsg");
 
         } catch (ClassCastException e) {
-            return "❌ Ошибка: неверный формат данных от сервера";
+            LoggerUtils.error("Bybit: неожиданный формат ответа при закрытии " + symbol, e);
+            String closePositionResult = "❌ Bybit вернул неожиданный формат ответа.\n\n" + cancelReport;
+            return OperationResult.failure(closePositionResult, e);
         } catch (NullPointerException e) {
-            return "❌ Ошибка: неполные данные в ответе от API";
+            LoggerUtils.error("Bybit: отсутствуют поля в ответе при закрытии " + symbol, e);
+            String closePositionResult = "❌ Ответ от Bybit не содержит ожидаемых полей.\n\n" + cancelReport;
+            return OperationResult.failure(closePositionResult, e);
         } catch (Exception e) {
-            return "❌ Ошибка: " + e.getMessage();
+            LoggerUtils.error("Техническая ошибка при закрытии позиции " + symbol, e);
+            String closePositionResult = "❌ Техническая ошибка при закрытии позиции.\n\n" + cancelReport;
+            return OperationResult.failure(closePositionResult, e);
         }
     }
 }
