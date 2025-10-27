@@ -63,6 +63,10 @@ public class UpdateDealCreator {
             StringBuilder msg = new StringBuilder(orderRestorer.restoreOrders(deal, bybitManager));
 
 
+            String result = orderRestorer.restoreOrders(deal, bybitManager); //пытаемся привязать тейки и стопы
+            !!!разбирательство с попыткой привязки ордеров к только что созданной сделке,
+                    чтобы не создавать лишние и избежать лишних ошибок (продолжать отсюда)
+
             // Если TP/SL отсутствуют — устанавливаем
             if (deal.getTakeProfits().isEmpty()) {
                 strategy.setTP(deal, bybitManager);

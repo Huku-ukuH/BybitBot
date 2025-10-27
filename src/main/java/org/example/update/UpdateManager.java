@@ -20,7 +20,7 @@ public class UpdateManager {
 
     @Getter
     private boolean createDealsProcess = false;
-    private List<BybitPositionTrackerService.OrderInfo> pendingOrdersForDealCreation = new ArrayList<>();
+    private List<BybitPositionTrackerService.OrderInfo> pendingLimitOrdersForDealCreation = new ArrayList<>();
     private List<PositionInfo> pendingNewPositions = new ArrayList<>();
     private int currentRestoreIndex = 0;
 
@@ -79,7 +79,7 @@ public class UpdateManager {
     }
     private String handleDealCreation(String strategyName, ActiveDealStore activeDealStore, long chatId) {
         CreationResult result = updateDealCreator.dealCreationTypeSorter(
-                strategyName, activeDealStore, chatId, bybitManager, pendingNewPositions, pendingOrdersForDealCreation, currentRestoreIndex, orderRestorer);
+                strategyName, activeDealStore, chatId, bybitManager, pendingNewPositions, pendingLimitOrdersForDealCreation, currentRestoreIndex, orderRestorer);
         currentRestoreIndex = result.nextIndex();
         createDealsProcess = result.stillCreating();
         return result.message();
@@ -87,13 +87,13 @@ public class UpdateManager {
 
     private void startCreationDealProcessFromOrders(List<BybitPositionTrackerService.OrderInfo> orders) {
         this.pendingNewPositions.clear();
-        this.pendingOrdersForDealCreation = new ArrayList<>(orders);
+        this.pendingLimitOrdersForDealCreation = new ArrayList<>(orders);
         this.currentRestoreIndex = 0;
         this.createDealsProcess = true;
     }
 
     private void startCreationDealProcess(List<PositionInfo> newPositions) {
-        this.pendingOrdersForDealCreation.clear();
+        this.pendingLimitOrdersForDealCreation.clear();
         this.pendingNewPositions = new ArrayList<>(newPositions);
         this.currentRestoreIndex = 0;
         this.createDealsProcess = true;
