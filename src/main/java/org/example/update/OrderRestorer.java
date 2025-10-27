@@ -5,6 +5,7 @@ import org.example.bybit.service.BybitPositionTrackerService;
 import org.example.deal.Deal;
 import org.example.deal.utils.OrderManager;
 import org.example.model.Direction;
+import org.example.result.OperationResult;
 import org.example.util.JsonUtils;
 import org.example.util.LoggerUtils;
 
@@ -15,7 +16,7 @@ import java.util.stream.Collectors;
 
 public class OrderRestorer {
 
-    public String restoreOrders(Deal deal, BybitManager bybitManager) {
+    public OperationResult restoreOrders(Deal deal, BybitManager bybitManager) {
 
         BybitPositionTrackerService trackerService = bybitManager.getBybitPositionTrackerService();
         String symbol = deal.getSymbol().toString();
@@ -24,7 +25,7 @@ public class OrderRestorer {
         try {
             List<BybitPositionTrackerService.OrderInfo> orders = trackerService.getOrders(symbol);
             if (orders == null || orders.isEmpty()) {
-                return "📭 Нет активных ордеров для символа " + symbol;
+                return OperationResult.success("📭 Нет активных ордеров для символа " + symbol);
             }
 
 
@@ -45,22 +46,22 @@ public class OrderRestorer {
 
                     boolean isStopLoss = isStopLossPrice(triggerPrice, deal.getDirection(), deal.getEntryPrice());
                     OrderManager.OrderType type = isStopLoss ? OrderManager.OrderType.SL : OrderManager.OrderType.TP;
-                    result.append(deal.addOrderId(new OrderManager(order.getOrderId(), type, triggerPrice)));
+                    result.append(deal.addOrderId(new OrderManager(order.getOrderId(), type, triggerPrice)).getMessage());
 
                 } else if (order.getPrice() != null && !order.getPrice().isEmpty()) {
                     if (isTakeProfitOrder(order, deal.getDirection())) {
                         Double price = parseDouble(order.getPrice());
                         if (price != null) {
-                            result.append(deal.addOrderId(new OrderManager(order.getOrderId(), OrderManager.OrderType.TP, price)));
+                            result.append(deal.addOrderId(new OrderManager(order.getOrderId(), OrderManager.OrderType.TP, price)).getMessage());
                         }
                     }
                 }
             }
         } catch (IOException e) {
-            LoggerUtils.error("⚠️ Не удалось загрузить ордера с Bybit для символа " + symbol, e);
+            OperationResult.failure("⚠️ Не удалось загрузить ордера с Bybit для символа " + symbol, e);
         }
 
-        return result.toString();
+        return OperationResult.success(result.toString());
     }
 
     private boolean isAlreadyBound(Deal deal, String orderId) {

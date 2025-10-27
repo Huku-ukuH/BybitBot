@@ -142,7 +142,11 @@ public abstract class AbstractStrategy implements TradingStrategy {
                     bybitManager.getBybitOrderService()
             );
 
-            return exitPlanManager.executeExitPlan(deal, plan); // ← этот метод тоже должен возвращать OperationResult, без исключений
+            OperationResult executeExitPlanResult = exitPlanManager.executeExitPlan(deal, plan);
+            if (!executeExitPlanResult.isSuccess()){
+                executeExitPlanResult.logErrorIfFailed();
+            }
+            return  executeExitPlanResult;
 
         } catch (Exception e) {
             return OperationResult.failure("❌ Ошибка при установке TP: ", e);

@@ -9,6 +9,7 @@ import org.example.model.Direction;
 import org.example.model.EntryType;
 import org.example.model.Symbol;
 import org.example.monitor.dto.PositionInfo;
+import org.example.result.OperationResult;
 import org.example.util.LoggerUtils;
 
 import java.util.ArrayList;
@@ -31,10 +32,16 @@ public class StrategyDealCreator {
         deal.setStrategyName(strategyName);
         deal.setPositionSize(positionInfo.getSize());
 
-        activeDealStore.addDeal(deal);
-        deal.setActive(true);
+
+        OperationResult addDealResult = activeDealStore.addDeal(deal);
+        if (!addDealResult.isSuccess()) {
+            LoggerUtils.debug("Частичный успех! " + addDealResult.getMessage() + "\n" + "Создана новая сделка по позиции!" + deal.getSymbol().toString());
+            deal.setActive(true);
+            return deal;
+        }
 
         LoggerUtils.debug("Создана новая сделка по позиции!" + deal.getSymbol().toString());
+        deal.setActive(true);
         return deal;
     }
     public Deal createDealByLimitOrder(BybitPositionTrackerService.OrderInfo limitOrder, long chatId, String strategyName, ActiveDealStore activeDealStore) {
@@ -52,7 +59,11 @@ public class StrategyDealCreator {
         deal.setStrategyName(strategyName);
         deal.setPositionSize(Double.parseDouble(limitOrder.getQty()));
 
-        activeDealStore.addDeal(deal);
+        OperationResult addDealResult = activeDealStore.addDeal(deal);
+        if (!addDealResult.isSuccess()) {
+            LoggerUtils.debug("Частичный успех! " + addDealResult.getMessage() + "\n" + "Создана новая сделка по лимитному ордеру!" + deal.getSymbol().toString());
+            return deal;
+        }
         LoggerUtils.debug("Создана новая сделка по лимитному ордеру!" + deal.getSymbol().toString());
         return deal;
     }

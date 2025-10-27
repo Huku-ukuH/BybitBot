@@ -38,7 +38,7 @@ public class ActiveDealStore {
 
         // 1. Если уже есть по ID — не добавляем
         if (dealsById.containsKey(deal.getId())) {
-            return OperationResult.failure("Айди Deal " + deal.getSymbol() + "   уже есть в ActiveDealStore, операция добавления отклонена");
+            return OperationResult.failure("Айди Deal " + deal.getSymbol() + " попытка повторного добавления в ActiveDealStore отклонена");
         }
 
         // 2. Если уже есть активная сделка по символу — не добавляем
@@ -47,7 +47,7 @@ public class ActiveDealStore {
             // Можно дополнительно проверить, что хотя бы одна активна
             boolean hasActive = existingDeals.stream().anyMatch(Deal::isActive);
             if (hasActive) {
-                return OperationResult.failure("Активная Deal " + deal.getSymbol() + "  уже есть в ActiveDealStore, операция добавления отклонена");
+                return OperationResult.failure("Активная Deal " + deal.getSymbol() + "  попытка повторного добавления в ActiveDealStore отклонена");
             }
         }
 

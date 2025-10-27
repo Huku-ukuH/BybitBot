@@ -124,7 +124,6 @@ public class BybitOrderService {
 
             }
         }
-
         if (hasErrors) {
             return OperationResult.success("❌ЧАСТИЧНЫЙ УСПЕХ " + "\n" + cancelOrdersStringResult);
         }

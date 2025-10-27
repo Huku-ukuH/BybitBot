@@ -7,6 +7,7 @@ import org.example.deal.Deal;
 import org.example.deal.utils.DealCalculator;
 import org.example.model.Symbol;
 import org.example.monitor.dto.PositionInfo;
+import org.example.result.OperationResult;
 import org.example.strategy.strategies.strategies.superStrategy.AbstractStrategy;
 import org.example.strategy.strategies.strategies.StrategyFactory;
 import org.example.util.LoggerUtils;
@@ -42,6 +43,7 @@ public class UpdateDealCreator {
             BybitManager bybitManager,
             List<PositionInfo> pendingPositions,
             int currentIndex, OrderRestorer orderRestorer) {
+        boolean hasErrors = false;
 
         if (currentIndex >= pendingPositions.size()) {
             return new CreationResult(false, "❌ Нет сделок для восстановления.");
@@ -60,25 +62,29 @@ public class UpdateDealCreator {
             Deal deal = strategy.getStrategyDealCreator().createDealByOpenPosition(pos, chatId, strategyName, activeDealStore);
             deal.setId(pos.getSymbol() + "_" + strategyName + "_" + System.currentTimeMillis());
 
-            StringBuilder msg = new StringBuilder(orderRestorer.restoreOrders(deal, bybitManager));
+            StringBuilder msg = new StringBuilder();
 
-
-            String result = orderRestorer.restoreOrders(deal, bybitManager); //пытаемся привязать тейки и стопы
-            !!!разбирательство с попыткой привязки ордеров к только что созданной сделке,
-                    чтобы не создавать лишние и избежать лишних ошибок (продолжать отсюда)
-
-            // Если TP/SL отсутствуют — устанавливаем
-            if (deal.getTakeProfits().isEmpty()) {
-                strategy.setTP(deal, bybitManager);
+            //Пытаемся привязать ордера
+            OperationResult restoreOrdersResult = orderRestorer.restoreOrders(deal, bybitManager);
+            if (!restoreOrdersResult.isSuccess()){
+                msg.append("Частичный успех! ").append(restoreOrdersResult.getMessage());
             }
 
-            //
+            // Если TP отсутствуют — устанавливаем
+            if (deal.getTakeProfits().isEmpty()) {
+                OperationResult setTPResult = strategy.setTP(deal, bybitManager);
+                if (!setTPResult.isSuccess()) {
+                    setTPResult.logErrorIfFailed();
+                }
+            }
+
+            //Если SL отсутствуют — устанавливаем
             Double currentSL = deal.getStopLoss();
             if (currentSL == null || currentSL <= 0.0) {
                 double newSL = dealCalculator.getStopLossForUpdatePosition(deal, strategy.getConfig());
                 // Дополнительная защита: если расчёт дал 0 — не ставим
                 if (newSL <= 0) {
-                    LoggerUtils.warn("Рассчитанный SL <= 0 для " + deal.getSymbol() + ". Пропуск установки.");
+                    msg.append("Частичный успех! Рассчитанный SL <= 0 для ").append(deal.getSymbol()).append(". Пропуск установки.");
                 } else {
                     deal.setStopLoss(newSL);
                     msg.append(strategy.setSL(deal, bybitManager));
@@ -93,6 +99,7 @@ public class UpdateDealCreator {
                 msg.append("\n🆕 След: ").append(next.getSymbol()).append(". Укажите стратегию:");
                 return new CreationResult(true, msg.toString(), currentIndex);
             } else {
+
                 return new CreationResult(false, msg.append("\n✅ Все Deals восстановлены!").toString());
             }
 

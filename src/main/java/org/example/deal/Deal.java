@@ -8,6 +8,7 @@ import org.example.model.Direction;
 import org.example.model.EntryType;
 import org.example.deal.dto.DealRequest;
 import org.example.monitor.dto.PositionInfo;
+import org.example.result.OperationResult;
 import org.example.strategy.params.ExitPlan;
 import org.example.strategy.strategies.strategies.superStrategy.AbstractStrategy;
 import org.example.strategy.strategies.strategies.StrategyFactory;
@@ -243,26 +244,28 @@ public class Deal {
     }
 
 
-    public String addOrderId(OrderManager order) {
-        if (order == null) return "order == null";
+    public OperationResult addOrderId(OrderManager order) {
+        if (order == null) {
+            OperationResult.failure("order == null");
+        }
 
-        String message = "";
+
         if (order.getOrderType() == OrderManager.OrderType.SL) {
             ordersIdList.removeIf(om -> om.getOrderType() == OrderManager.OrderType.SL);
             ordersIdList.add(order);
             setStopLoss(order.getOrderPrice());
-            message = "🔗SL заменен: " + order.getOrderId() + " -> " + order.getOrderPrice() + "\n";
-            return message; // ← ВЫХОД
+            String message = "🔗SL заменен: " + order.getOrderId() + " -> " + order.getOrderPrice() + "\n";
+            return OperationResult.success(message); // ← ВЫХОД
         }
         if (order.getOrderType() == OrderManager.OrderType.TP) {
             if (takeProfits == null) takeProfits = new ArrayList<>();
             takeProfits.add(order.getOrderPrice());
             takeProfits.sort(Double::compareTo);
-            message = "🔗 Привязан TP (лимит): " + order.getOrderId() + " -> " + order.getOrderPrice() + "\n";
+            String message = "🔗 Привязан TP (лимит): " + order.getOrderId() + " -> " + order.getOrderPrice() + "\n";
             ordersIdList.add(order); // ← только здесь
-            return message;
+            return OperationResult.success(message);
         }
-        return "Неизвестный тип ордера";
+       return OperationResult.failure("Неизвестный тип ордера");
     }
 
 
