@@ -103,12 +103,12 @@ public class Deal {
                         this.strategy = StrategyFactory.getStrategy(this.strategyName);
                         LoggerUtils.warn("Стратегия для сделки " + this.id + " откачена к 'ai'.");
                     } catch (Exception fallbackException) {
-                        LoggerUtils.error("Критическая ошибка: Не удалось загрузить даже стратегию 'ai' для сделки " + this.id, fallbackException);
+                        LoggerUtils.error("Критическая ошибка: Не удалось загрузить даже стратегию для сделки " + this.id, fallbackException);
                         throw new RuntimeException("Не удалось инициализировать стратегию для сделки " + this.id, fallbackException);
                     }
                 } else {
-                    LoggerUtils.error("Критическая ошибка: Не удалось загрузить стратегию 'ai' для сделки " + this.id, e);
-                    throw new RuntimeException("Не удалось инициализировать стратегию 'ai' для сделки " + this.id, e);
+                    LoggerUtils.error("Критическая ошибка: Не удалось загрузить стратегию для сделки " + this.id, e);
+                    throw new RuntimeException("Не удалось инициализировать стратегию для сделки" + this.id, e);
                 }
             }
         }
